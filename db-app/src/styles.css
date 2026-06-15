@@ -933,11 +933,11 @@ main {
   clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
   border: 0;
   padding: 0;
-  color: rgba(11, 32, 38, 0.78);
-  font-size: 10px;
+  color: rgba(11, 32, 38, 0.72);
+  font-size: 9px;
   font-weight: 900;
   text-shadow: rgba(255, 255, 255, 0.8) 0 1px 0;
-  box-shadow: rgba(11, 32, 38, 0.12) 0 8px 18px;
+  box-shadow: rgba(11, 32, 38, 0.08) 0 6px 14px;
   transition: transform 150ms ease, opacity 150ms ease, filter 150ms ease;
 }
 
@@ -948,9 +948,9 @@ main {
 .fake-h3-cell:hover,
 .fake-h3-cell.selected {
   z-index: 4;
-  transform: translate(-50%, -50%) scale(1.08);
+  transform: translate(-50%, -50%) scale(1.04);
   filter: saturate(1.12) contrast(1.05);
-  outline: 2px solid rgba(11, 32, 38, 0.58);
+  outline: 2px solid rgba(11, 32, 38, 0.44);
 }
 
 .fallback-route-point {

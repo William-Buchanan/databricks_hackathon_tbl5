@@ -46,6 +46,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   const [mapError, setMapError] = useState<string | null>(apiKey ? null : "Google Maps key missing. Showing mock spatial geometry.");
   const [layerMode, setLayerMode] = useState<MapLayerMode>("points");
   const [mapReady, setMapReady] = useState(false);
+  const [mapZoom, setMapZoom] = useState(5);
 
   const center = selected ?? regions[0];
   const heatCells = useMemo(() => fakeH3Cells(regions), [regions]);
@@ -100,6 +101,10 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
           });
           originRef.current = origin;
           requestFastestRoute(origin, selectedRef.current, onRouteSummary);
+        });
+        googleMap.current.addListener("zoom_changed", () => {
+          const zoom = googleMap.current?.getZoom?.();
+          if (typeof zoom === "number") setMapZoom(zoom);
         });
       })
       .catch((error: Error) => setMapError(error.message));
@@ -156,8 +161,9 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
     if (layerMode !== "h3") return;
 
     heatCells.forEach((cell) => {
+      const scaledVertices = scaleVertices(cell, polygonScaleForZoom(mapZoom));
       const polygon = new window.google.maps.Polygon({
-        paths: cell.vertices.map((point) => ({ lat: point.latitude, lng: point.longitude })),
+        paths: scaledVertices.map((point) => ({ lat: point.latitude, lng: point.longitude })),
         strokeColor: heatColor(cell.averageRisk),
         strokeOpacity: 0.86,
         strokeWeight: selected?.id && cell.regions.some((region) => region.id === selected.id) ? 3 : 1,
@@ -169,7 +175,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
       polygon.addListener("mouseover", () => onHover(cell.topRegion));
       heatPolygons.current.push(polygon);
     });
-  }, [heatCells, layerMode, mapReady, onHover, onSelect, selected?.id]);
+  }, [heatCells, layerMode, mapReady, mapZoom, onHover, onSelect, selected?.id]);
 
   useEffect(() => {
     if (showRouting) {
@@ -432,14 +438,14 @@ function HeatmapLegend({ cells }: { cells: FakeH3Cell[] }) {
   const highRiskCells = cells.filter((cell) => cell.averageRisk >= 70).length;
   return (
     <div className="heatmap-legend">
-      <strong>Fake H3 heatmap</strong>
+      <strong>H3 risk heatmap</strong>
       <span>{cells.length} India cells · {highRiskCells} high-risk</span>
       <div>
         <i className="low" />
         <i className="mid" />
         <i className="high" />
       </div>
-      <small>Aggregated from current filters by risk, trust, and population.</small>
+      <small>Aggregated by table H3 index, risk, trust, and population.</small>
     </div>
   );
 }
@@ -485,7 +491,7 @@ function fakeH3Cells(regions: RegionAggregate[]): FakeH3Cell[] {
         id,
         centerLat,
         centerLng,
-        vertices: hexVertices(centerLat, centerLng, latStep * 0.54, lngStep * 0.54),
+        vertices: hexVertices(centerLat, centerLng, latStep * 0.28, lngStep * 0.28),
         regions: cellRegions,
         topRegion,
         averageRisk: Math.round(cellRegions.reduce((sum, region) => sum + region.riskScore, 0) / cellRegions.length),
@@ -508,9 +514,23 @@ function projectHeatCells(cells: FakeH3Cell[]) {
     ...cell,
     x: ((cell.centerLng - INDIA_BOUNDS.minLng) / (INDIA_BOUNDS.maxLng - INDIA_BOUNDS.minLng)) * 100,
     y: 100 - ((cell.centerLat - INDIA_BOUNDS.minLat) / (INDIA_BOUNDS.maxLat - INDIA_BOUNDS.minLat)) * 100,
-    width: 9.2,
-    height: 9.8,
+    width: 5.6,
+    height: 6.1,
   }));
+}
+
+function scaleVertices(cell: FakeH3Cell, scale: number) {
+  return cell.vertices.map((vertex) => ({
+    latitude: cell.centerLat + (vertex.latitude - cell.centerLat) * scale,
+    longitude: cell.centerLng + (vertex.longitude - cell.centerLng) * scale,
+  }));
+}
+
+function polygonScaleForZoom(zoom: number) {
+  if (zoom >= 10) return 0.32;
+  if (zoom >= 8) return 0.42;
+  if (zoom >= 6) return 0.58;
+  return 0.72;
 }
 
 function hexVertices(centerLat: number, centerLng: number, latRadius: number, lngRadius: number) {

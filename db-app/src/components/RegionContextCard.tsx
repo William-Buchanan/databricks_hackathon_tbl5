@@ -43,10 +43,7 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
       </div>
       <div className="investment-card">
         <strong>Facility evidence</strong>
-        <span>{region.facilities[0]?.h3Index7 ? `H3 ${region.facilities[0].h3Index7}` : "H3 unavailable"}</span>
-        <small>
-          Source quality {region.facilities[0]?.sourceQualityScore ?? "n/a"} · Completeness {region.facilities[0]?.dataCompletenessScore ?? "n/a"}
-        </small>
+        <span>{region.facilities[0]?.confidenceCategory || "Confidence category unavailable"}</span>
       </div>
       <div className="investment-card">
         <strong>GBD life-threatening score</strong>
