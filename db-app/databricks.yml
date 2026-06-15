@@ -1,0 +1,17 @@
+bundle:
+  name: medical-desert-planner
+
+resources:
+  apps:
+    medical_desert_planner:
+      name: medical-desert-planner
+      source_code_path: .
+      config:
+        command:
+          - npm
+          - run
+          - start
+
+targets:
+  dev:
+    default: true
