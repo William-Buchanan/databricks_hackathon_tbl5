@@ -22,7 +22,7 @@ export function RegionList({ regions, selectedId, onSelect, onHover, flaggedIds,
       </div>
       <div className="region-list">
         {regions.map((region) => (
-          <article key={region.id} className={`region-row ${selectedId === region.id ? "selected" : ""}`} onMouseEnter={() => onHover?.(region)}>
+          <article key={region.id} className={`region-row ${regionRowStatusClass(region.status)} ${selectedId === region.id ? "selected" : ""}`} onMouseEnter={() => onHover?.(region)}>
             <button type="button" className="region-main" onClick={() => onSelect(region)}>
               <span className={`status-dot ${statusClass(region.status)}`} />
               <span>
@@ -47,4 +47,11 @@ export function RegionList({ regions, selectedId, onSelect, onHover, flaggedIds,
       </div>
     </section>
   );
+}
+
+function regionRowStatusClass(status: string): string {
+  if (status === "Verified Care Desert") return "region-desert";
+  if (status === "Data-Poor Region") return "region-data-poor";
+  if (status === "Monitored Access") return "region-monitored";
+  return "region-audit";
 }

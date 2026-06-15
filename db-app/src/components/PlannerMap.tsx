@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cellToBoundary, cellToLatLng, cellToParent, isValidCell, latLngToCell, polygonToCells } from "h3-js";
 import { AlertTriangle, Route } from "lucide-react";
 import { logPlannerEvent } from "../lib/auditLog";
 import type { RegionAggregate, RouteSummary } from "../types";
@@ -17,15 +18,17 @@ interface PlannerMapProps {
 
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 const INDIA_BOUNDS = { minLat: 6.5, maxLat: 37.5, minLng: 68, maxLng: 98.5 };
+const H3_DISPLAY_RESOLUTION = 4;
 type MapLayerMode = "points" | "h3";
 
-interface FakeH3Cell {
+interface H3Cell {
   id: string;
+  hasData: boolean;
   centerLat: number;
   centerLng: number;
   vertices: Array<{ latitude: number; longitude: number }>;
   regions: RegionAggregate[];
-  topRegion: RegionAggregate;
+  topRegion?: RegionAggregate;
   averageRisk: number;
   averageTrust: number;
   population: number;
@@ -46,10 +49,9 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   const [mapError, setMapError] = useState<string | null>(apiKey ? null : "Google Maps key missing. Showing mock spatial geometry.");
   const [layerMode, setLayerMode] = useState<MapLayerMode>("points");
   const [mapReady, setMapReady] = useState(false);
-  const [mapZoom, setMapZoom] = useState(5);
 
   const center = selected ?? regions[0];
-  const heatCells = useMemo(() => fakeH3Cells(regions), [regions]);
+  const heatCells = useMemo(() => h3Cells(regions), [regions]);
 
   selectedRef.current = selected;
   showRoutingRef.current = showRouting;
@@ -101,10 +103,6 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
           });
           originRef.current = origin;
           requestFastestRoute(origin, selectedRef.current, onRouteSummary);
-        });
-        googleMap.current.addListener("zoom_changed", () => {
-          const zoom = googleMap.current?.getZoom?.();
-          if (typeof zoom === "number") setMapZoom(zoom);
         });
       })
       .catch((error: Error) => setMapError(error.message));
@@ -161,21 +159,22 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
     if (layerMode !== "h3") return;
 
     heatCells.forEach((cell) => {
-      const scaledVertices = scaleVertices(cell, polygonScaleForZoom(mapZoom));
       const polygon = new window.google.maps.Polygon({
-        paths: scaledVertices.map((point) => ({ lat: point.latitude, lng: point.longitude })),
-        strokeColor: heatColor(cell.averageRisk),
-        strokeOpacity: 0.86,
-        strokeWeight: selected?.id && cell.regions.some((region) => region.id === selected.id) ? 3 : 1,
-        fillColor: heatColor(cell.averageRisk),
-        fillOpacity: 0.34 + Math.min(0.28, cell.averageRisk / 360),
+        paths: cell.vertices.map((point) => ({ lat: point.latitude, lng: point.longitude })),
+        strokeColor: cell.hasData ? heatColor(cell.averageRisk) : "#d8cfbf",
+        strokeOpacity: cell.hasData ? 0.88 : 0.34,
+        strokeWeight: selected?.id && cell.regions.some((region) => region.id === selected.id) ? 2.4 : 0.7,
+        fillColor: cell.hasData ? heatColor(cell.averageRisk) : "#edf2ef",
+        fillOpacity: cell.hasData ? 0.32 + Math.min(0.3, cell.averageRisk / 340) : 0.16,
         map: googleMap.current,
       });
-      polygon.addListener("click", () => onSelect(cell.topRegion));
-      polygon.addListener("mouseover", () => onHover(cell.topRegion));
+      if (cell.topRegion) {
+        polygon.addListener("click", () => onSelect(cell.topRegion as RegionAggregate));
+        polygon.addListener("mouseover", () => onHover(cell.topRegion as RegionAggregate));
+      }
       heatPolygons.current.push(polygon);
     });
-  }, [heatCells, layerMode, mapReady, mapZoom, onHover, onSelect, selected?.id]);
+  }, [heatCells, layerMode, mapReady, onHover, onSelect, selected?.id]);
 
   useEffect(() => {
     if (showRouting) {
@@ -201,7 +200,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
         <div className="map-actions">
           <div className="map-layer-toggle" aria-label="Map layer">
             <button type="button" className={layerMode === "points" ? "active" : ""} onClick={() => changeLayerMode("points")}>
-              Current map
+              Map
             </button>
             <button type="button" className={layerMode === "h3" ? "active" : ""} onClick={() => changeLayerMode("h3")}>
               H3 heatmap
@@ -337,7 +336,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   }
 }
 
-function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<FakeH3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; layerMode: MapLayerMode; onSelect: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
+function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<H3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; layerMode: MapLayerMode; onSelect: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
   const [origin, setOrigin] = useState<{ x: number; y: number; latitude: number; longitude: number } | undefined>();
 
   useEffect(() => {
@@ -384,21 +383,23 @@ function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect
           <button
             key={cell.id}
             type="button"
-            className={`fake-h3-cell ${selected && cell.regions.some((region) => region.id === selected.id) ? "selected" : ""}`}
+            className={`h3-cell ${selected && cell.regions.some((region) => region.id === selected.id) ? "selected" : ""}`}
             style={{
               left: `${cell.x}%`,
               top: `${cell.y}%`,
               width: `${cell.width}%`,
               height: `${cell.height}%`,
-              backgroundColor: heatColor(cell.averageRisk),
-              opacity: 0.34 + Math.min(0.32, cell.averageRisk / 320),
+              backgroundColor: cell.hasData ? heatColor(cell.averageRisk) : "#edf2ef",
+              opacity: cell.hasData ? 0.34 + Math.min(0.32, cell.averageRisk / 320) : 0.18,
             }}
             title={`${cell.id}: risk ${cell.averageRisk}, trust ${cell.averageTrust}, ${cell.regions.length} zones`}
             onClick={(event) => {
               event.stopPropagation();
-              onSelect(cell.topRegion);
+              if (cell.topRegion) onSelect(cell.topRegion);
             }}
-            onMouseEnter={() => onHover(cell.topRegion)}
+            onMouseEnter={() => {
+              if (cell.topRegion) onHover(cell.topRegion);
+            }}
           >
             <span>{cell.id.split("-").slice(-2).join("-")}</span>
           </button>
@@ -434,18 +435,18 @@ function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect
   );
 }
 
-function HeatmapLegend({ cells }: { cells: FakeH3Cell[] }) {
+function HeatmapLegend({ cells }: { cells: H3Cell[] }) {
   const highRiskCells = cells.filter((cell) => cell.averageRisk >= 70).length;
   return (
     <div className="heatmap-legend">
       <strong>H3 risk heatmap</strong>
-      <span>{cells.length} India cells · {highRiskCells} high-risk</span>
+      <span>{cells.length} grid cells · {highRiskCells} high-risk</span>
       <div>
         <i className="low" />
         <i className="mid" />
         <i className="high" />
       </div>
-      <small>Aggregated by table H3 index, risk, trust, and population.</small>
+      <small>Resolution {H3_DISPLAY_RESOLUTION}; facility H3 indices are aggregated into each cell.</small>
     </div>
   );
 }
@@ -468,83 +469,57 @@ function projectPoints(regions: RegionAggregate[]) {
   }));
 }
 
-function fakeH3Cells(regions: RegionAggregate[]): FakeH3Cell[] {
-  const latStep = 2.65;
-  const lngStep = 3.05;
+function h3Cells(regions: RegionAggregate[]): H3Cell[] {
+  const indiaCells = indiaCoverageCells();
   const groups = new Map<string, RegionAggregate[]>();
 
   regions
     .filter((region) => insideIndia(region.latitude, region.longitude))
     .forEach((region) => {
-      const id = region.facilities.find((facility) => facility.h3Index7)?.h3Index7 ?? fakeH3Id(region.latitude, region.longitude, latStep, lngStep);
+      const rawH3 = region.facilities.find((facility) => facility.h3Index7 && isValidCell(facility.h3Index7))?.h3Index7;
+      const id = rawH3 ? cellToParent(rawH3, H3_DISPLAY_RESOLUTION) : latLngToCell(region.latitude, region.longitude, H3_DISPLAY_RESOLUTION);
       const current = groups.get(id) ?? [];
       current.push(region);
       groups.set(id, current);
     });
 
-  return Array.from(groups.entries())
-    .map(([id, cellRegions]) => {
-      const centerLat = avg(cellRegions.map((region) => region.latitude));
-      const centerLng = avg(cellRegions.map((region) => region.longitude));
-      const topRegion = [...cellRegions].sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore)[0];
-      return {
-        id,
-        centerLat,
-        centerLng,
-        vertices: hexVertices(centerLat, centerLng, latStep * 0.28, lngStep * 0.28),
-        regions: cellRegions,
-        topRegion,
-        averageRisk: Math.round(cellRegions.reduce((sum, region) => sum + region.riskScore, 0) / cellRegions.length),
-        averageTrust: Math.round(cellRegions.reduce((sum, region) => sum + region.trustScore, 0) / cellRegions.length),
-        population: cellRegions.reduce((sum, region) => sum + region.population, 0),
-      };
-    })
+  return Array.from(new Set([...indiaCells, ...groups.keys()]))
+    .map((id) => h3CellSummary(id, groups.get(id) ?? []))
     .sort((a, b) => b.averageRisk - a.averageRisk);
 }
 
-function fakeH3Id(latitude: number, longitude: number, latStep: number, lngStep: number) {
-  const row = Math.floor((latitude - INDIA_BOUNDS.minLat) / latStep);
-  const offset = row % 2 ? lngStep / 2 : 0;
-  const col = Math.floor((longitude - INDIA_BOUNDS.minLng - offset) / lngStep);
-  return `fake-h3-ind-r${String(row).padStart(2, "0")}-c${String(col).padStart(2, "0")}`;
+function h3CellSummary(id: string, cellRegions: RegionAggregate[]): H3Cell {
+  const [centerLat, centerLng] = cellToLatLng(id);
+  const topRegion = cellRegions.length ? [...cellRegions].sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore)[0] : undefined;
+  return {
+    id,
+    hasData: cellRegions.length > 0,
+    centerLat,
+    centerLng,
+    vertices: cellToBoundary(id).map(([latitude, longitude]) => ({ latitude, longitude })),
+    regions: cellRegions,
+    topRegion,
+    averageRisk: cellRegions.length ? Math.round(cellRegions.reduce((sum, region) => sum + region.riskScore, 0) / cellRegions.length) : 0,
+    averageTrust: cellRegions.length ? Math.round(cellRegions.reduce((sum, region) => sum + region.trustScore, 0) / cellRegions.length) : 0,
+    population: cellRegions.reduce((sum, region) => sum + region.population, 0),
+  };
 }
 
-function projectHeatCells(cells: FakeH3Cell[]) {
+function projectHeatCells(cells: H3Cell[]) {
   return cells.map((cell) => ({
     ...cell,
     x: ((cell.centerLng - INDIA_BOUNDS.minLng) / (INDIA_BOUNDS.maxLng - INDIA_BOUNDS.minLng)) * 100,
     y: 100 - ((cell.centerLat - INDIA_BOUNDS.minLat) / (INDIA_BOUNDS.maxLat - INDIA_BOUNDS.minLat)) * 100,
-    width: 5.6,
-    height: 6.1,
+    width: cell.hasData ? 4.2 : 3.2,
+    height: cell.hasData ? 4.6 : 3.5,
   }));
-}
-
-function scaleVertices(cell: FakeH3Cell, scale: number) {
-  return cell.vertices.map((vertex) => ({
-    latitude: cell.centerLat + (vertex.latitude - cell.centerLat) * scale,
-    longitude: cell.centerLng + (vertex.longitude - cell.centerLng) * scale,
-  }));
-}
-
-function polygonScaleForZoom(zoom: number) {
-  if (zoom >= 10) return 0.32;
-  if (zoom >= 8) return 0.42;
-  if (zoom >= 6) return 0.58;
-  return 0.72;
-}
-
-function hexVertices(centerLat: number, centerLng: number, latRadius: number, lngRadius: number) {
-  return Array.from({ length: 6 }, (_, index) => {
-    const angle = (Math.PI / 180) * (60 * index + 30);
-    return {
-      latitude: centerLat + Math.sin(angle) * latRadius,
-      longitude: centerLng + Math.cos(angle) * lngRadius,
-    };
-  });
 }
 
 function insideIndia(latitude: number, longitude: number) {
-  return latitude >= INDIA_BOUNDS.minLat && latitude <= INDIA_BOUNDS.maxLat && longitude >= INDIA_BOUNDS.minLng && longitude <= INDIA_BOUNDS.maxLng;
+  if (latitude < INDIA_BOUNDS.minLat || latitude > INDIA_BOUNDS.maxLat || longitude < INDIA_BOUNDS.minLng || longitude > INDIA_BOUNDS.maxLng) {
+    return false;
+  }
+  return [INDIA_POLYGON, ...INDIA_ISLAND_POLYGONS].some((polygon) => pointInPolygon([longitude, latitude], polygon));
 }
 
 function heatColor(risk: number) {
@@ -562,6 +537,73 @@ function markerColor(status: string): string {
   return "#2563eb";
 }
 
-function avg(values: number[]): number {
-  return Number((values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length)).toFixed(5));
+const INDIA_POLYGON: Array<[number, number]> = [
+  [68.1, 23.7],
+  [69.3, 22.2],
+  [70.2, 20.7],
+  [72.0, 19.0],
+  [72.8, 15.4],
+  [74.0, 12.7],
+  [75.5, 9.4],
+  [77.3, 8.1],
+  [79.6, 8.8],
+  [80.3, 13.1],
+  [80.1, 15.9],
+  [82.2, 17.5],
+  [84.8, 19.2],
+  [86.9, 20.8],
+  [88.4, 21.7],
+  [89.8, 22.1],
+  [92.1, 21.7],
+  [94.5, 24.0],
+  [97.2, 27.0],
+  [95.5, 29.3],
+  [92.4, 27.9],
+  [89.1, 26.4],
+  [88.0, 27.9],
+  [84.1, 27.5],
+  [80.3, 30.2],
+  [78.0, 32.4],
+  [75.2, 34.9],
+  [73.4, 34.0],
+  [74.2, 31.4],
+  [72.2, 28.8],
+  [70.1, 27.0],
+  [68.1, 23.7],
+];
+
+const INDIA_ISLAND_POLYGONS: Array<Array<[number, number]>> = [
+  [
+    [71.4, 8.0],
+    [74.2, 8.0],
+    [74.2, 12.9],
+    [71.4, 12.9],
+    [71.4, 8.0],
+  ],
+  [
+    [92.0, 6.4],
+    [94.4, 6.4],
+    [94.4, 14.3],
+    [92.0, 14.3],
+    [92.0, 6.4],
+  ],
+];
+
+let cachedIndiaCoverageCells: string[] | undefined;
+
+function indiaCoverageCells() {
+  cachedIndiaCoverageCells ??= [INDIA_POLYGON, ...INDIA_ISLAND_POLYGONS].flatMap((polygon) => polygonToCells([polygon], H3_DISPLAY_RESOLUTION, true));
+  return cachedIndiaCoverageCells;
+}
+
+function pointInPolygon(point: [number, number], polygon: Array<[number, number]>) {
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersects = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
 }

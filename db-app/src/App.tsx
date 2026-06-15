@@ -12,6 +12,7 @@ import { RiskMatrix } from "./components/RiskMatrix";
 import { RegionContextCard } from "./components/RegionContextCard";
 import { ScenarioSidebar } from "./components/ScenarioSidebar";
 import { SpecialtyPlanningControls } from "./components/SpecialtyPlanningControls";
+import { StatusLegend } from "./components/StatusLegend";
 import { costTierForProfile, hbpBenchmarkForProfile } from "./data/hbpRateList";
 import { generateHealthcareDataset } from "./data/mockHealthcare";
 import { budgetInfoForProfile, getDefaultProfile, getProfile } from "./data/specialtyPlanning";
@@ -328,6 +329,7 @@ export default function App() {
               <button type="button" className={activeTab === "details" ? "active" : ""} onClick={() => setActiveTab("details")}>Facilities</button>
               <button type="button" className={activeTab === "scenarios" ? "active" : ""} onClick={() => setActiveTab("scenarios")}>Scenarios</button>
             </div>
+            <StatusLegend />
             {activeTab === "zones" && <RegionList regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} flaggedIds={flaggedIds} onToggleFlag={toggleFlag} />}
             {activeTab === "matrix" && <RiskMatrix regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />}
             {activeTab === "details" && <InspectionPanel region={selectedRegion} capability={filters.capability} />}

@@ -7,7 +7,7 @@ interface RiskMatrixProps {
   onHover: (region: RegionAggregate) => void;
 }
 
-const quadrants = [
+export const STATUS_LEGEND_ITEMS = [
   { id: "verified", title: "Verified Care Desert", hint: "High risk, high trust", x: "right", y: "top" },
   { id: "data-poor", title: "Data-Poor Region", hint: "High risk, low trust", x: "right", y: "bottom" },
   { id: "monitored", title: "Monitored Access", hint: "Low risk, high trust", x: "left", y: "top" },
@@ -23,21 +23,14 @@ export function RiskMatrix({ regions, selectedId, onSelect, onHover }: RiskMatri
           <h2>Separate deserts from missing evidence.</h2>
         </div>
         <div className="matrix-header-tools">
-          <div className="matrix-legend" aria-label="Matrix color legend">
-            {quadrants.map((quadrant) => (
-              <span key={quadrant.id}>
-                <i className={statusClass(quadrant.title)} /> {quadrant.title}
-              </span>
-            ))}
-          </div>
           <span className="source-badge">Mock India dataset</span>
         </div>
       </div>
       <div className="matrix">
         <span className="axis y-axis">Trust score</span>
         <span className="axis x-axis">Risk score</span>
-        {quadrants.map((quadrant) => (
-          <div key={quadrant.id} className={`quadrant ${quadrant.x} ${quadrant.y}`}>
+        {STATUS_LEGEND_ITEMS.map((quadrant) => (
+          <div key={quadrant.id} className={`quadrant quadrant-${quadrant.id} ${quadrant.x} ${quadrant.y}`}>
             <strong>{quadrant.title}</strong>
             <span>{quadrant.hint}</span>
           </div>
