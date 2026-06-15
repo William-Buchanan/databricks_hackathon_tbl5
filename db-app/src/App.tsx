@@ -136,6 +136,30 @@ export default function App() {
     });
   }, [effectiveFilters, planningProfile]);
 
+  const scopeToRegion = useCallback((region: RegionAggregate) => {
+    const nextFilters: Filters = {
+      ...effectiveFilters,
+      state: region.state,
+      district: region.district,
+      subDistrict: region.subDistrict,
+      pinCode: region.pinCode,
+    };
+    setFilters(nextFilters);
+    setSelectedRegionId(region.id);
+    setHoveredRegionId(region.id);
+    setRouteSummary(undefined);
+    setActiveTab("zones");
+    logPlannerEvent({
+      eventType: "h3_region_scoped",
+      payload: {
+        region: regionLogPayload(region),
+        previous: effectiveFilters,
+        next: nextFilters,
+        planningProfile: profileLogPayload(planningProfile),
+      },
+    });
+  }, [effectiveFilters, planningProfile]);
+
   const openFlaggedRegion = useCallback((region: RegionAggregate) => {
     selectRegion(region);
     setActiveMode("globe");
@@ -317,6 +341,7 @@ export default function App() {
             regions={regions}
             selected={selectedRegion}
             onSelect={selectRegion}
+            onScopeRegion={scopeToRegion}
             onHover={hoverRegion}
             showRouting={showRouting}
             onToggleRouting={() => setShowRouting((value) => !value)}

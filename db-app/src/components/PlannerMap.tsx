@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cellToBoundary, cellToLatLng, cellToParent, isValidCell, latLngToCell, polygonToCells } from "h3-js";
 import { AlertTriangle, Route } from "lucide-react";
 import { logPlannerEvent } from "../lib/auditLog";
-import type { RegionAggregate, RouteSummary } from "../types";
+import type { FacilityRecord, RegionAggregate, RouteSummary } from "../types";
 import { loadGoogleMaps } from "../lib/mapLoader";
 import { statusClass } from "./RiskMatrix";
 
@@ -10,6 +10,7 @@ interface PlannerMapProps {
   regions: RegionAggregate[];
   selected?: RegionAggregate;
   onSelect: (region: RegionAggregate) => void;
+  onScopeRegion?: (region: RegionAggregate) => void;
   onHover: (region: RegionAggregate) => void;
   showRouting: boolean;
   onToggleRouting: () => void;
@@ -19,6 +20,7 @@ interface PlannerMapProps {
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 const INDIA_BOUNDS = { minLat: 6.5, maxLat: 37.5, minLng: 68, maxLng: 98.5 };
 const H3_DISPLAY_RESOLUTION = 4;
+const H3_FACILITY_DOT_ZOOM = 8;
 type MapLayerMode = "points" | "h3";
 
 interface H3Cell {
@@ -34,27 +36,39 @@ interface H3Cell {
   population: number;
 }
 
-export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, onToggleRouting, onRouteSummary }: PlannerMapProps) {
+interface H3FacilityPoint {
+  facility: FacilityRecord;
+  region: RegionAggregate;
+}
+
+export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover, showRouting, onToggleRouting, onRouteSummary }: PlannerMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMap = useRef<any>(null);
   const markers = useRef<any[]>([]);
   const heatPolygons = useRef<any[]>([]);
+  const h3FacilityMarkers = useRef<any[]>([]);
   const originMarker = useRef<any>(null);
   const destinationMarker = useRef<any>(null);
+  const h3HospitalMarker = useRef<any>(null);
+  const h3HospitalInfoWindow = useRef<any>(null);
   const directionsRenderer = useRef<any>(null);
   const originRef = useRef<{ latitude: number; longitude: number } | undefined>(undefined);
   const selectedRef = useRef<RegionAggregate | undefined>(selected);
   const showRoutingRef = useRef(showRouting);
+  const layerModeRef = useRef<MapLayerMode>("points");
   const lastCenteredRegionId = useRef<string | undefined>(undefined);
   const [mapError, setMapError] = useState<string | null>(apiKey ? null : "Google Maps key missing. Showing mock spatial geometry.");
   const [layerMode, setLayerMode] = useState<MapLayerMode>("points");
   const [mapReady, setMapReady] = useState(false);
+  const [mapZoom, setMapZoom] = useState(5);
 
   const center = selected ?? regions[0];
   const heatCells = useMemo(() => h3Cells(regions), [regions]);
+  const h3FacilityPoints = useMemo(() => facilityPointsForRegions(regions), [regions]);
 
   selectedRef.current = selected;
   showRoutingRef.current = showRouting;
+  layerModeRef.current = layerMode;
 
   useEffect(() => {
     if (!apiKey || !mapRef.current) return;
@@ -90,7 +104,9 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
           },
         });
         setMapReady(true);
+        setMapZoom(googleMap.current.getZoom?.() ?? 5);
         googleMap.current.addListener("click", (event: any) => {
+          if (layerModeRef.current !== "points") return;
           if (!showRoutingRef.current) return;
           const latLng = event.latLng;
           if (!latLng) return;
@@ -103,6 +119,10 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
           });
           originRef.current = origin;
           requestFastestRoute(origin, selectedRef.current, onRouteSummary);
+        });
+        googleMap.current.addListener("zoom_changed", () => {
+          const zoom = googleMap.current?.getZoom?.();
+          if (typeof zoom === "number") setMapZoom(zoom);
         });
       })
       .catch((error: Error) => setMapError(error.message));
@@ -145,7 +165,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
       lastCenteredRegionId.current = selected.id;
       googleMap.current.panTo({ lat: selected.latitude, lng: selected.longitude });
       googleMap.current.setZoom(9);
-      if (showRoutingRef.current) {
+      if (layerMode === "points" && showRoutingRef.current) {
         placeDestinationMarker(selected);
       }
     }
@@ -169,7 +189,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
         map: googleMap.current,
       });
       if (cell.topRegion) {
-        polygon.addListener("click", () => onSelect(cell.topRegion as RegionAggregate));
+        polygon.addListener("click", () => applyH3RegionScope(cell.topRegion as RegionAggregate));
         polygon.addListener("mouseover", () => onHover(cell.topRegion as RegionAggregate));
       }
       heatPolygons.current.push(polygon);
@@ -177,6 +197,44 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   }, [heatCells, layerMode, mapReady, onHover, onSelect, selected?.id]);
 
   useEffect(() => {
+    if (!mapReady || !googleMap.current || !window.google?.maps) return;
+    h3FacilityMarkers.current.forEach((marker) => marker.setMap(null));
+    h3FacilityMarkers.current = [];
+
+    if (layerMode !== "h3" || mapZoom < H3_FACILITY_DOT_ZOOM) return;
+
+    h3FacilityPoints.forEach((point) => {
+      const marker = new window.google.maps.Marker({
+        position: { lat: point.facility.latitude, lng: point.facility.longitude },
+        map: googleMap.current,
+        title: point.facility.facilityName,
+        zIndex: 900,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: selected?.id === point.region.id ? 5.8 : 4.8,
+          fillColor: markerColor(point.region.status),
+          fillOpacity: 0.92,
+          strokeColor: "#ffffff",
+          strokeWeight: 1.5,
+        },
+      });
+      marker.addListener("click", () => {
+        showH3Facility(point, marker);
+        onScopeRegion?.(point.region);
+        if (!onScopeRegion) onSelect(point.region);
+        selectedRef.current = point.region;
+      });
+      marker.addListener("mouseover", () => onHover(point.region));
+      h3FacilityMarkers.current.push(marker);
+    });
+  }, [h3FacilityPoints, layerMode, mapReady, mapZoom, onHover, onScopeRegion, onSelect, selected?.id]);
+
+  useEffect(() => {
+    if (layerMode === "h3") {
+      clearRoute();
+      onRouteSummary(undefined);
+      return;
+    }
     if (showRouting) {
       if (selectedRef.current) {
         placeDestinationMarker(selectedRef.current);
@@ -185,7 +243,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
     }
     clearRoute();
     onRouteSummary(undefined);
-  }, [showRouting, onRouteSummary]);
+  }, [showRouting, onRouteSummary, layerMode]);
 
   const fallbackPoints = useMemo(() => projectPoints(regions), [regions]);
   const fallbackCells = useMemo(() => projectHeatCells(heatCells), [heatCells]);
@@ -234,11 +292,12 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
             showRouting={showRouting && layerMode === "points"}
             layerMode={layerMode}
             onSelect={onSelect}
+            onScopeRegion={onScopeRegion}
             onHover={onHover}
             onRouteSummary={onRouteSummary}
           />
         )}
-        {layerMode === "h3" && <HeatmapLegend cells={heatCells} />}
+        {layerMode === "h3" && <HeatmapLegend cells={heatCells} facilityCount={h3FacilityPoints.length} mapZoom={mapZoom} />}
         {mapError && (
           <div className="map-warning">
             <AlertTriangle size={15} /> {mapError}
@@ -306,6 +365,67 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
     });
   }
 
+  function showH3Hospital(region: RegionAggregate) {
+    if (!mapReady || !googleMap.current || !window.google?.maps) return;
+    const hospital = displayHospitalForRegion(region);
+    const position = {
+      lat: hospital.latitude,
+      lng: hospital.longitude,
+    };
+    if (h3HospitalMarker.current) h3HospitalMarker.current.setMap(null);
+    h3HospitalInfoWindow.current?.close?.();
+    h3HospitalMarker.current = new window.google.maps.Marker({
+      position,
+      map: googleMap.current,
+      title: hospital.name,
+      zIndex: 1000,
+      icon: {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: "#0b2026",
+        fillOpacity: 0.94,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
+      },
+    });
+    h3HospitalInfoWindow.current = new window.google.maps.InfoWindow({
+      content: `<strong>${escapeHtml(hospital.name)}</strong><br/><span>${escapeHtml(region.villageTown)}, ${escapeHtml(region.district)}</span>`,
+    });
+    h3HospitalInfoWindow.current.open({
+      anchor: h3HospitalMarker.current,
+      map: googleMap.current,
+    });
+    googleMap.current.panTo(position);
+  }
+
+  function showH3Facility(point: H3FacilityPoint, marker: any) {
+    if (!mapReady || !googleMap.current || !window.google?.maps) return;
+    const position = {
+      lat: point.facility.latitude,
+      lng: point.facility.longitude,
+    };
+    h3HospitalInfoWindow.current?.close?.();
+    h3HospitalInfoWindow.current = new window.google.maps.InfoWindow({
+      content: `<strong>${escapeHtml(point.facility.facilityName || "Hospital")}</strong><br/><span>${escapeHtml(point.region.villageTown)}, ${escapeHtml(point.region.district)}</span>`,
+    });
+    h3HospitalInfoWindow.current.open({
+      anchor: marker,
+      map: googleMap.current,
+    });
+    googleMap.current.panTo(position);
+  }
+
+  function clearH3Hospital() {
+    h3HospitalInfoWindow.current?.close?.();
+    h3HospitalInfoWindow.current = null;
+    h3FacilityMarkers.current.forEach((marker) => marker.setMap(null));
+    h3FacilityMarkers.current = [];
+    if (h3HospitalMarker.current) {
+      h3HospitalMarker.current.setMap(null);
+      h3HospitalMarker.current = null;
+    }
+  }
+
   function clearRoute() {
     directionsRenderer.current?.setDirections({ routes: [] });
     if (originMarker.current) {
@@ -324,6 +444,8 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
     if (nextMode === "h3") {
       clearRoute();
       onRouteSummary(undefined);
+    } else {
+      clearH3Hospital();
     }
     logPlannerEvent({
       eventType: "map_layer_changed",
@@ -334,9 +456,40 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
       },
     });
   }
+
+  function applyH3RegionScope(region: RegionAggregate) {
+    clearRoute();
+    onRouteSummary(undefined);
+    showH3Hospital(region);
+    onScopeRegion?.(region);
+    if (!onScopeRegion) onSelect(region);
+    selectedRef.current = region;
+  }
 }
 
-function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<H3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; layerMode: MapLayerMode; onSelect: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
+function displayHospitalForRegion(region: RegionAggregate) {
+  const facility = [...region.facilities].sort((a, b) => (b.accuracyConfidence ?? 0) - (a.accuracyConfidence ?? 0))[0];
+  return {
+    name: facility?.facilityName || region.villageTown,
+    latitude: facility?.latitude || region.latitude,
+    longitude: facility?.longitude || region.longitude,
+  };
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    const replacements: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+    return replacements[character];
+  });
+}
+
+function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect, onScopeRegion, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<H3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; layerMode: MapLayerMode; onSelect: (region: RegionAggregate) => void; onScopeRegion?: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
   const [origin, setOrigin] = useState<{ x: number; y: number; latitude: number; longitude: number } | undefined>();
 
   useEffect(() => {
@@ -395,7 +548,10 @@ function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect
             title={`${cell.id}: risk ${cell.averageRisk}, trust ${cell.averageTrust}, ${cell.regions.length} zones`}
             onClick={(event) => {
               event.stopPropagation();
-              if (cell.topRegion) onSelect(cell.topRegion);
+              if (cell.topRegion) {
+                onScopeRegion?.(cell.topRegion);
+                if (!onScopeRegion) onSelect(cell.topRegion);
+              }
             }}
             onMouseEnter={() => {
               if (cell.topRegion) onHover(cell.topRegion);
@@ -435,8 +591,9 @@ function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect
   );
 }
 
-function HeatmapLegend({ cells }: { cells: H3Cell[] }) {
+function HeatmapLegend({ cells, facilityCount, mapZoom }: { cells: H3Cell[]; facilityCount: number; mapZoom: number }) {
   const highRiskCells = cells.filter((cell) => cell.averageRisk >= 70).length;
+  const dotsVisible = mapZoom >= H3_FACILITY_DOT_ZOOM;
   return (
     <div className="heatmap-legend">
       <strong>H3 risk heatmap</strong>
@@ -447,6 +604,7 @@ function HeatmapLegend({ cells }: { cells: H3Cell[] }) {
         <i className="high" />
       </div>
       <small>Resolution {H3_DISPLAY_RESOLUTION}; facility H3 indices are aggregated into each cell.</small>
+      <small>{dotsVisible ? `${facilityCount} hospital dots visible` : `Zoom to ${H3_FACILITY_DOT_ZOOM}+ to see hospital dots`}</small>
     </div>
   );
 }
@@ -467,6 +625,21 @@ function projectPoints(regions: RegionAggregate[]) {
     x: 8 + ((region.longitude - minLng) / Math.max(0.1, maxLng - minLng)) * 84,
     y: 92 - ((region.latitude - minLat) / Math.max(0.1, maxLat - minLat)) * 84,
   }));
+}
+
+function facilityPointsForRegions(regions: RegionAggregate[]): H3FacilityPoint[] {
+  const seen = new Set<string>();
+  const points: H3FacilityPoint[] = [];
+  regions.forEach((region) => {
+    region.facilities.forEach((facility) => {
+      if (!Number.isFinite(facility.latitude) || !Number.isFinite(facility.longitude)) return;
+      const key = facility.uniqueId ?? facility.id ?? `${facility.facilityName}-${facility.latitude}-${facility.longitude}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      points.push({ facility, region });
+    });
+  });
+  return points;
 }
 
 function h3Cells(regions: RegionAggregate[]): H3Cell[] {
