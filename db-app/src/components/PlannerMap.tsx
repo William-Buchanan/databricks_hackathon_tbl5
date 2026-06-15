@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Route } from "lucide-react";
+import { logPlannerEvent } from "../lib/auditLog";
 import type { RegionAggregate, RouteSummary } from "../types";
 import { loadGoogleMaps } from "../lib/mapLoader";
 import { statusClass } from "./RiskMatrix";
@@ -15,11 +16,26 @@ interface PlannerMapProps {
 }
 
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+const INDIA_BOUNDS = { minLat: 6.5, maxLat: 37.5, minLng: 68, maxLng: 98.5 };
+type MapLayerMode = "points" | "h3";
+
+interface FakeH3Cell {
+  id: string;
+  centerLat: number;
+  centerLng: number;
+  vertices: Array<{ latitude: number; longitude: number }>;
+  regions: RegionAggregate[];
+  topRegion: RegionAggregate;
+  averageRisk: number;
+  averageTrust: number;
+  population: number;
+}
 
 export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, onToggleRouting, onRouteSummary }: PlannerMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMap = useRef<any>(null);
   const markers = useRef<any[]>([]);
+  const heatPolygons = useRef<any[]>([]);
   const originMarker = useRef<any>(null);
   const destinationMarker = useRef<any>(null);
   const directionsRenderer = useRef<any>(null);
@@ -28,8 +44,11 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   const showRoutingRef = useRef(showRouting);
   const lastCenteredRegionId = useRef<string | undefined>(undefined);
   const [mapError, setMapError] = useState<string | null>(apiKey ? null : "Google Maps key missing. Showing mock spatial geometry.");
+  const [layerMode, setLayerMode] = useState<MapLayerMode>("points");
+  const [mapReady, setMapReady] = useState(false);
 
   const center = selected ?? regions[0];
+  const heatCells = useMemo(() => fakeH3Cells(regions), [regions]);
 
   selectedRef.current = selected;
   showRoutingRef.current = showRouting;
@@ -67,6 +86,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
             strokeWeight: 6,
           },
         });
+        setMapReady(true);
         googleMap.current.addListener("click", (event: any) => {
           if (!showRoutingRef.current) return;
           const latLng = event.latLng;
@@ -86,7 +106,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   }, []);
 
   useEffect(() => {
-    if (!googleMap.current || !window.google?.maps) return;
+    if (!mapReady || !googleMap.current || !window.google?.maps) return;
     markers.current.forEach((marker) => marker.setMap(null));
     markers.current = [];
 
@@ -94,6 +114,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
       const marker = new window.google.maps.Marker({
         position: { lat: region.latitude, lng: region.longitude },
         map: googleMap.current,
+        visible: layerMode === "points",
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: selected?.id === region.id ? 10 : 7,
@@ -125,7 +146,30 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
         placeDestinationMarker(selected);
       }
     }
-  }, [regions, selected, onSelect, onHover]);
+  }, [regions, selected, onSelect, onHover, layerMode, mapReady]);
+
+  useEffect(() => {
+    if (!mapReady || !googleMap.current || !window.google?.maps) return;
+    heatPolygons.current.forEach((polygon) => polygon.setMap(null));
+    heatPolygons.current = [];
+
+    if (layerMode !== "h3") return;
+
+    heatCells.forEach((cell) => {
+      const polygon = new window.google.maps.Polygon({
+        paths: cell.vertices.map((point) => ({ lat: point.latitude, lng: point.longitude })),
+        strokeColor: heatColor(cell.averageRisk),
+        strokeOpacity: 0.86,
+        strokeWeight: selected?.id && cell.regions.some((region) => region.id === selected.id) ? 3 : 1,
+        fillColor: heatColor(cell.averageRisk),
+        fillOpacity: 0.34 + Math.min(0.28, cell.averageRisk / 360),
+        map: googleMap.current,
+      });
+      polygon.addListener("click", () => onSelect(cell.topRegion));
+      polygon.addListener("mouseover", () => onHover(cell.topRegion));
+      heatPolygons.current.push(polygon);
+    });
+  }, [heatCells, layerMode, mapReady, onHover, onSelect, selected?.id]);
 
   useEffect(() => {
     if (showRouting) {
@@ -139,6 +183,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   }, [showRouting, onRouteSummary]);
 
   const fallbackPoints = useMemo(() => projectPoints(regions), [regions]);
+  const fallbackCells = useMemo(() => projectHeatCells(heatCells), [heatCells]);
 
   return (
     <section className="map-panel">
@@ -147,22 +192,48 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
           <p className="eyebrow">Spatial evidence</p>
           <h2>Catchment and travel burden</h2>
         </div>
-        <button
-          type="button"
-          className="ghost-button"
-          onClick={() => {
-            if (showRouting) {
-              clearRoute();
-              onRouteSummary(undefined);
-            }
-            onToggleRouting();
-          }}
-        >
-          <Route size={14} /> {showRouting ? "Hide travel route" : "Show travel route"}
-        </button>
+        <div className="map-actions">
+          <div className="map-layer-toggle" aria-label="Map layer">
+            <button type="button" className={layerMode === "points" ? "active" : ""} onClick={() => changeLayerMode("points")}>
+              Current map
+            </button>
+            <button type="button" className={layerMode === "h3" ? "active" : ""} onClick={() => changeLayerMode("h3")}>
+              H3 heatmap
+            </button>
+          </div>
+          {layerMode === "points" && (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                if (showRouting) {
+                  clearRoute();
+                  onRouteSummary(undefined);
+                }
+                onToggleRouting();
+              }}
+            >
+              <Route size={14} /> {showRouting ? "Hide travel route" : "Show travel route"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="map-canvas">
-        {apiKey && !mapError ? <div ref={mapRef} className="google-map" /> : <FallbackMap points={fallbackPoints} selected={selected} showRouting={showRouting} onSelect={onSelect} onHover={onHover} onRouteSummary={onRouteSummary} />}
+        {apiKey && !mapError ? (
+          <div ref={mapRef} className="google-map" />
+        ) : (
+          <FallbackMap
+            points={fallbackPoints}
+            cells={fallbackCells}
+            selected={selected}
+            showRouting={showRouting && layerMode === "points"}
+            layerMode={layerMode}
+            onSelect={onSelect}
+            onHover={onHover}
+            onRouteSummary={onRouteSummary}
+          />
+        )}
+        {layerMode === "h3" && <HeatmapLegend cells={heatCells} />}
         {mapError && (
           <div className="map-warning">
             <AlertTriangle size={15} /> {mapError}
@@ -220,7 +291,7 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
   }
 
   function placeDestinationMarker(destination: RegionAggregate) {
-    if (!googleMap.current || !window.google?.maps) return;
+    if (!mapReady || !googleMap.current || !window.google?.maps) return;
     if (destinationMarker.current) destinationMarker.current.setMap(null);
     destinationMarker.current = new window.google.maps.Marker({
       position: { lat: destination.latitude, lng: destination.longitude },
@@ -242,9 +313,25 @@ export function PlannerMap({ regions, selected, onSelect, onHover, showRouting, 
     }
     originRef.current = undefined;
   }
+
+  function changeLayerMode(nextMode: MapLayerMode) {
+    setLayerMode(nextMode);
+    if (nextMode === "h3") {
+      clearRoute();
+      onRouteSummary(undefined);
+    }
+    logPlannerEvent({
+      eventType: "map_layer_changed",
+      payload: {
+        layerMode: nextMode,
+        h3CellCount: heatCells.length,
+        visibleRegionCount: regions.length,
+      },
+    });
+  }
 }
 
-function FallbackMap({ points, selected, showRouting, onSelect, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; selected?: RegionAggregate; showRouting: boolean; onSelect: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
+function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<FakeH3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; layerMode: MapLayerMode; onSelect: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
   const [origin, setOrigin] = useState<{ x: number; y: number; latitude: number; longitude: number } | undefined>();
 
   useEffect(() => {
@@ -286,8 +373,32 @@ function FallbackMap({ points, selected, showRouting, onSelect, onHover, onRoute
     >
       <div className="map-gridline vertical" />
       <div className="map-gridline horizontal" />
+      {layerMode === "h3" &&
+        cells.map((cell) => (
+          <button
+            key={cell.id}
+            type="button"
+            className={`fake-h3-cell ${selected && cell.regions.some((region) => region.id === selected.id) ? "selected" : ""}`}
+            style={{
+              left: `${cell.x}%`,
+              top: `${cell.y}%`,
+              width: `${cell.width}%`,
+              height: `${cell.height}%`,
+              backgroundColor: heatColor(cell.averageRisk),
+              opacity: 0.34 + Math.min(0.32, cell.averageRisk / 320),
+            }}
+            title={`${cell.id}: risk ${cell.averageRisk}, trust ${cell.averageTrust}, ${cell.regions.length} zones`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(cell.topRegion);
+            }}
+            onMouseEnter={() => onHover(cell.topRegion)}
+          >
+            <span>{cell.id.split("-").slice(-2).join("-")}</span>
+          </button>
+        ))}
       {showRouting && origin && <span className="fallback-route-point fallback-route-a" style={{ left: `${origin.x}%`, top: `${origin.y}%` }}>A</span>}
-      {points.map(({ region, x, y }) => (
+      {layerMode === "points" && points.map(({ region, x, y }) => (
         <button
           key={region.id}
           type="button"
@@ -312,7 +423,23 @@ function FallbackMap({ points, selected, showRouting, onSelect, onHover, onRoute
           onMouseEnter={() => onHover(region)}
         />
       ))}
-      {showRouting && selected && <span className="fallback-route-point fallback-route-b" style={selectedFallbackPosition(selected, points)}>B</span>}
+      {showRouting && selected && layerMode === "points" && <span className="fallback-route-point fallback-route-b" style={selectedFallbackPosition(selected, points)}>B</span>}
+    </div>
+  );
+}
+
+function HeatmapLegend({ cells }: { cells: FakeH3Cell[] }) {
+  const highRiskCells = cells.filter((cell) => cell.averageRisk >= 70).length;
+  return (
+    <div className="heatmap-legend">
+      <strong>Fake H3 heatmap</strong>
+      <span>{cells.length} India cells · {highRiskCells} high-risk</span>
+      <div>
+        <i className="low" />
+        <i className="mid" />
+        <i className="high" />
+      </div>
+      <small>Aggregated from current filters by risk, trust, and population.</small>
     </div>
   );
 }
@@ -335,9 +462,86 @@ function projectPoints(regions: RegionAggregate[]) {
   }));
 }
 
+function fakeH3Cells(regions: RegionAggregate[]): FakeH3Cell[] {
+  const latStep = 2.65;
+  const lngStep = 3.05;
+  const groups = new Map<string, RegionAggregate[]>();
+
+  regions
+    .filter((region) => insideIndia(region.latitude, region.longitude))
+    .forEach((region) => {
+      const id = region.facilities.find((facility) => facility.h3Index7)?.h3Index7 ?? fakeH3Id(region.latitude, region.longitude, latStep, lngStep);
+      const current = groups.get(id) ?? [];
+      current.push(region);
+      groups.set(id, current);
+    });
+
+  return Array.from(groups.entries())
+    .map(([id, cellRegions]) => {
+      const centerLat = avg(cellRegions.map((region) => region.latitude));
+      const centerLng = avg(cellRegions.map((region) => region.longitude));
+      const topRegion = [...cellRegions].sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore)[0];
+      return {
+        id,
+        centerLat,
+        centerLng,
+        vertices: hexVertices(centerLat, centerLng, latStep * 0.54, lngStep * 0.54),
+        regions: cellRegions,
+        topRegion,
+        averageRisk: Math.round(cellRegions.reduce((sum, region) => sum + region.riskScore, 0) / cellRegions.length),
+        averageTrust: Math.round(cellRegions.reduce((sum, region) => sum + region.trustScore, 0) / cellRegions.length),
+        population: cellRegions.reduce((sum, region) => sum + region.population, 0),
+      };
+    })
+    .sort((a, b) => b.averageRisk - a.averageRisk);
+}
+
+function fakeH3Id(latitude: number, longitude: number, latStep: number, lngStep: number) {
+  const row = Math.floor((latitude - INDIA_BOUNDS.minLat) / latStep);
+  const offset = row % 2 ? lngStep / 2 : 0;
+  const col = Math.floor((longitude - INDIA_BOUNDS.minLng - offset) / lngStep);
+  return `fake-h3-ind-r${String(row).padStart(2, "0")}-c${String(col).padStart(2, "0")}`;
+}
+
+function projectHeatCells(cells: FakeH3Cell[]) {
+  return cells.map((cell) => ({
+    ...cell,
+    x: ((cell.centerLng - INDIA_BOUNDS.minLng) / (INDIA_BOUNDS.maxLng - INDIA_BOUNDS.minLng)) * 100,
+    y: 100 - ((cell.centerLat - INDIA_BOUNDS.minLat) / (INDIA_BOUNDS.maxLat - INDIA_BOUNDS.minLat)) * 100,
+    width: 9.2,
+    height: 9.8,
+  }));
+}
+
+function hexVertices(centerLat: number, centerLng: number, latRadius: number, lngRadius: number) {
+  return Array.from({ length: 6 }, (_, index) => {
+    const angle = (Math.PI / 180) * (60 * index + 30);
+    return {
+      latitude: centerLat + Math.sin(angle) * latRadius,
+      longitude: centerLng + Math.cos(angle) * lngRadius,
+    };
+  });
+}
+
+function insideIndia(latitude: number, longitude: number) {
+  return latitude >= INDIA_BOUNDS.minLat && latitude <= INDIA_BOUNDS.maxLat && longitude >= INDIA_BOUNDS.minLng && longitude <= INDIA_BOUNDS.maxLng;
+}
+
+function heatColor(risk: number) {
+  if (risk >= 78) return "#dc2626";
+  if (risk >= 64) return "#f97316";
+  if (risk >= 48) return "#f59e0b";
+  if (risk >= 32) return "#84cc16";
+  return "#10b981";
+}
+
 function markerColor(status: string): string {
   if (status === "Verified Care Desert") return "#ef4444";
   if (status === "Data-Poor Region") return "#f59e0b";
   if (status === "Monitored Access") return "#10b981";
   return "#2563eb";
+}
+
+function avg(values: number[]): number {
+  return Number((values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length)).toFixed(5));
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, Flag, Globe2, Grid2X2, X } from "lucide-react";
 import { AskAiPanel } from "./components/AskAiPanel";
 import { ExploreCards } from "./components/ExploreCards";
@@ -17,7 +17,7 @@ import { generateHealthcareDataset } from "./data/mockHealthcare";
 import { budgetInfoForProfile, getDefaultProfile, getProfile } from "./data/specialtyPlanning";
 import { logPlannerEvent } from "./lib/auditLog";
 import { ALL_VALUE, aggregateRegions, applyFilters, uniqueSorted } from "./lib/scoring";
-import type { Filters, PlanningScenario, RegionAggregate, RouteSummary } from "./types";
+import type { FacilityRecord, Filters, PlanningScenario, RegionAggregate, RouteSummary } from "./types";
 
 const defaultProfile = getDefaultProfile();
 const initialFilters: Filters = {
@@ -38,7 +38,9 @@ type PlannerTab = "zones" | "matrix" | "details" | "scenarios";
 type PlannerMode = "explore" | "globe";
 
 export default function App() {
-  const dataset = useMemo(() => generateHealthcareDataset(), []);
+  const fallbackDataset = useMemo(() => generateHealthcareDataset(), []);
+  const [dataset, setDataset] = useState<FacilityRecord[]>(fallbackDataset);
+  const [datasetSource, setDatasetSource] = useState("mock");
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [selectedRegionId, setSelectedRegionId] = useState<string | undefined>();
   const [hoveredRegionId, setHoveredRegionId] = useState<string | undefined>();
@@ -52,6 +54,34 @@ export default function App() {
   const [showAskAi, setShowAskAi] = useState(false);
   const [showFlags, setShowFlags] = useState(false);
   const [showHbpTable, setShowHbpTable] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/facilities")
+      .then((response) => response.json())
+      .then((data: { records?: FacilityRecord[]; source?: string; error?: string }) => {
+        if (cancelled) return;
+        if (data.records?.length) {
+          setDataset(data.records);
+          setDatasetSource(data.source ?? "workspace.silver.facilities_with_confidence_score_and_h3");
+          logPlannerEvent({
+            eventType: "facility_dataset_loaded",
+            payload: {
+              source: data.source,
+              recordCount: data.records.length,
+            },
+          });
+          return;
+        }
+        setDatasetSource(`mock fallback${data.error ? `: ${data.error}` : ""}`);
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setDatasetSource(`mock fallback: ${error.message}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const scopedRecords = useMemo(() => applyKeyword(applyFilters(dataset, filters), filters.keyword), [dataset, filters]);
   const regions = useMemo(() => aggregateRegions(scopedRecords, filters.capability), [scopedRecords, filters.capability]);
@@ -254,6 +284,7 @@ export default function App() {
 
       <header className="app-header">
         <h1>Find the highest-risk care gaps.</h1>
+        <span className="source-badge">Data: {datasetSource}</span>
       </header>
 
       <section className="planner-layout full-width">

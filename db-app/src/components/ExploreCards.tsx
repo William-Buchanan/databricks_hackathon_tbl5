@@ -1,5 +1,4 @@
 import { Building2, Clock, ExternalLink, Facebook, HeartPulse, MapPin, ShieldCheck } from "lucide-react";
-import { facebookHospitalCards } from "../data/facebookHospitalCards";
 import type { FacilityRecord, RegionAggregate, SpecialtyPlanningProfile } from "../types";
 import { statusClass } from "./RiskMatrix";
 
@@ -30,21 +29,21 @@ export function ExploreCards({ facilities, regions, selectedId, planningProfile,
       </div>
       <div className="opportunity-grid">
         {cards.map(({ facility, region }, index) => {
-          const sourceCard = facebookHospitalCards[index % facebookHospitalCards.length];
+          const externalLink = facility.facebookLink || facility.sourceUrls?.[0] || facility.officialWebsite;
           return (
             <article
               key={facility.id}
               className={`opportunity-card ${selectedId === region.id ? "selected" : ""}`}
               onMouseEnter={() => onHover(region)}
             >
-              <button type="button" className="opportunity-image" onClick={() => onSelect(region)} aria-label={`Open ${sourceCard.hospitalName}`}>
+              <button type="button" className="opportunity-image" onClick={() => onSelect(region)} aria-label={`Open ${facility.facilityName}`}>
                 <span className={`status-dot ${statusClass(region.status)}`} />
                 <strong>{index % 3 === 0 ? "Care gap" : index % 3 === 1 ? "Capacity lift" : "Audit lead"}</strong>
                 <small>{region.status}</small>
               </button>
               <div className="opportunity-body">
                 <button type="button" onClick={() => onSelect(region)}>
-                  <h3>{sourceCard.hospitalName}</h3>
+                  <h3>{facility.facilityName}</h3>
                 </button>
               <p>
                 <MapPin size={14} /> {facility.villageTown}, {facility.district}, {facility.state}
@@ -67,10 +66,14 @@ export function ExploreCards({ facilities, regions, selectedId, planningProfile,
                 <span>{planningProfile.category}</span>
                 <span>GBD life-threat {planningProfile.lifeCriticality}/5</span>
                 <span>{planningProfile.gbdEvidence.primaryCause}</span>
+                {facility.h3Index7 && <span>H3 {facility.h3Index7}</span>}
               </div>
-              <a className="facebook-card-link" href={sourceCard.facebookLink} target="_blank" rel="noreferrer">
-                <Facebook size={15} /> Facebook profile <ExternalLink size={13} />
-              </a>
+              {externalLink && (
+                <a className="facebook-card-link" href={externalLink} target="_blank" rel="noreferrer">
+                  {facility.facebookLink ? <Facebook size={15} /> : <ExternalLink size={15} />}
+                  {facility.facebookLink ? "Facebook profile" : "Source profile"} <ExternalLink size={13} />
+                </a>
+              )}
             </div>
           </article>
           );

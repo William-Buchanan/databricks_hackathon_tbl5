@@ -39,6 +39,14 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
       <div className="investment-card">
         <strong>Trust score</strong>
         <span>{region.trustScore}/100</span>
+        {region.facilities[0]?.confidenceCategory && <small>{region.facilities[0].confidenceCategory}</small>}
+      </div>
+      <div className="investment-card">
+        <strong>Facility evidence</strong>
+        <span>{region.facilities[0]?.h3Index7 ? `H3 ${region.facilities[0].h3Index7}` : "H3 unavailable"}</span>
+        <small>
+          Source quality {region.facilities[0]?.sourceQualityScore ?? "n/a"} · Completeness {region.facilities[0]?.dataCompletenessScore ?? "n/a"}
+        </small>
       </div>
       <div className="investment-card">
         <strong>GBD life-threatening score</strong>
@@ -85,6 +93,12 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
       <button type="button" className="primary-button" onClick={() => onToggleFlag(region.id)}>
         {isFlagged ? "Remove flag" : "Flag zone"}
       </button>
+      {region.facilities[0]?.sourceUrls?.[0] && (
+        <a className="route-summary" href={region.facilities[0].sourceUrls[0]} target="_blank" rel="noreferrer">
+          <strong>Primary source record</strong>
+          <small>{region.facilities[0].sourceUrls[0]}</small>
+        </a>
+      )}
     </aside>
   );
 }

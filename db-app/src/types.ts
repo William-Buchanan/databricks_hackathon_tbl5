@@ -24,6 +24,7 @@ export interface DataCompletenessLog {
 
 export interface FacilityRecord {
   id: string;
+  uniqueId?: string;
   state: string;
   district: string;
   subDistrict: string;
@@ -38,6 +39,21 @@ export interface FacilityRecord {
   operationalStatus: OperationalStatus;
   dataCompleteness: DataCompletenessLog;
   distanceToTertiaryMinutes: number;
+  facebookLink?: string;
+  sourceUrls?: string[];
+  officialWebsite?: string;
+  officialPhone?: string;
+  h3Index7?: string;
+  accuracyConfidence?: number;
+  confidenceCategory?: string;
+  semanticConsistencyScore?: number;
+  recentActivityScore?: number;
+  dataCompletenessScore?: number;
+  sourceQualityScore?: number;
+  hospitalDirectoryScore?: number;
+  mismatchDetectionScore?: number;
+  source?: string;
+  sourceTypes?: string[];
 }
 
 export interface RegionAggregate {

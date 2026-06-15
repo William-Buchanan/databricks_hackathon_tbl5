@@ -19,6 +19,9 @@ function askAiPlugin(apiKey?: string): Plugin {
       server.middlewares.use("/api/log-event", async (request, response) => {
         await handleLogEvent(request, response);
       });
+      server.middlewares.use("/api/facilities", async (request, response) => {
+        await handleFacilities(request, response);
+      });
     },
     configurePreviewServer(server) {
       server.middlewares.use("/api/ask-ai", async (request, response) => {
@@ -26,6 +29,9 @@ function askAiPlugin(apiKey?: string): Plugin {
       });
       server.middlewares.use("/api/log-event", async (request, response) => {
         await handleLogEvent(request, response);
+      });
+      server.middlewares.use("/api/facilities", async (request, response) => {
+        await handleFacilities(request, response);
       });
     },
   };
@@ -138,6 +144,83 @@ async function handleLogEvent(request: any, response: any) {
     response.statusCode = 200;
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ ok: false, error: (error as Error).message }));
+  }
+}
+
+async function handleFacilities(request: any, response: any) {
+  if (request.method !== "GET") {
+    response.statusCode = 405;
+    response.end(JSON.stringify({ records: [], source: "error", error: "Use GET to fetch facilities." }));
+    return;
+  }
+
+  const warehouseId = process.env.DATABRICKS_WAREHOUSE_ID;
+  if (!warehouseId || !process.env.DATABRICKS_HOST) {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ records: [], source: "fallback", error: "DATABRICKS_WAREHOUSE_ID or DATABRICKS_HOST is not configured." }));
+    return;
+  }
+
+  try {
+    const result = await executeSqlRows(
+      warehouseId,
+      `SELECT
+        unique_id,
+        name,
+        organization_type,
+        phone_numbers,
+        officialPhone,
+        email,
+        websites,
+        officialWebsite,
+        facebookLink,
+        address_city,
+        address_stateOrRegion,
+        address_zipOrPostcode,
+        facilityTypeId,
+        operatorTypeId,
+        description,
+        area,
+        numberDoctors,
+        capacity,
+        specialties,
+        procedure,
+        equipment,
+        capability,
+        recency_of_page_update,
+        distinct_social_media_presence_count,
+        affiliated_staff_presence,
+        custom_logo_presence,
+        number_of_facts_about_the_organization,
+        latitude,
+        longitude,
+        cluster_id,
+        source_urls,
+        in_hospital_directory,
+        semantic_consistency_score,
+        recent_activity_score,
+        data_completeness_score,
+        source_quality_score,
+        hospital_directory_score,
+        mismatch_detection_score,
+        accuracy_confidence,
+        confidence_category,
+        h3_index_7,
+        source,
+        source_types
+      FROM workspace.silver.facilities_with_confidence_score_and_h3
+      WHERE address_countryCode = 'IN'
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+      LIMIT 5000`,
+      [],
+    );
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ records: result.rows.map(mapFacilityRow), source: "workspace.silver.facilities_with_confidence_score_and_h3" }));
+  } catch (error) {
+    console.error(JSON.stringify({ facilities_query_error: (error as Error).message }));
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ records: [], source: "fallback", error: (error as Error).message }));
   }
 }
 
@@ -306,6 +389,145 @@ async function executeSql(warehouseId: string, statement: string, parameters: Ar
     const text = await response.text();
     throw new Error(`SQL statement failed with ${response.status}: ${text}`);
   }
+}
+
+async function executeSqlRows(warehouseId: string, statement: string, parameters: Array<{ name: string; value: string; type: string }>) {
+  const host = process.env.DATABRICKS_HOST?.replace(/\/$/, "");
+  if (!host) throw new Error("DATABRICKS_HOST is not configured.");
+  const token = await databricksAccessToken(host);
+  const response = await fetch(`${host}/api/2.0/sql/statements`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      warehouse_id: warehouseId,
+      statement,
+      parameters,
+      wait_timeout: "30s",
+      on_wait_timeout: "CONTINUE",
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(`SQL statement failed with ${response.status}: ${JSON.stringify(payload)}`);
+  }
+
+  const statementId = payload.statement_id;
+  let current = payload;
+  for (let attempt = 0; current.status?.state === "PENDING" || current.status?.state === "RUNNING"; attempt += 1) {
+    if (attempt > 12 || !statementId) break;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const nextResponse = await fetch(`${host}/api/2.0/sql/statements/${statementId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    current = await nextResponse.json();
+    if (!nextResponse.ok) throw new Error(`SQL statement polling failed with ${nextResponse.status}: ${JSON.stringify(current)}`);
+  }
+
+  if (current.status?.state === "FAILED") {
+    throw new Error(current.status?.error?.message ?? "SQL statement failed.");
+  }
+
+  const columns = current.manifest?.schema?.columns?.map((column: any) => column.name) ?? [];
+  const rows = current.result?.data_array?.map((row: unknown[]) =>
+    Object.fromEntries(columns.map((column: string, index: number) => [column, row[index]])),
+  ) ?? [];
+  return { columns, rows };
+}
+
+function mapFacilityRow(row: Record<string, any>) {
+  const sourceUrls = parseArray(row.source_urls);
+  const sourceTypes = parseArray(row.source_types);
+  const specialties = parseArray(row.specialties);
+  const procedures = parseArray(row.procedure);
+  const equipment = parseArray(row.equipment);
+  const capabilities = capabilitiesFor([...specialties, ...procedures, ...equipment, row.capability, row.description].join(" "));
+  const confidence = numeric(row.accuracy_confidence, 50);
+  const completeness = numeric(row.data_completeness_score, confidence);
+  const recent = daysSince(row.recency_of_page_update);
+  const capacity = numeric(row.capacity, 0);
+  const facilityName = stringValue(row.name, "Unnamed facility");
+
+  return {
+    id: stringValue(row.unique_id, stringValue(row.cluster_id, facilityName)).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    uniqueId: stringValue(row.unique_id, ""),
+    state: stringValue(row.address_stateOrRegion, "Unknown"),
+    district: stringValue(row.address_city, "Unknown"),
+    subDistrict: stringValue(row.address_city, "Unknown"),
+    pinCode: stringValue(row.address_zipOrPostcode, "Unknown").replace(/\s+/g, ""),
+    villageTown: stringValue(row.address_city, facilityName),
+    localPopulation: Math.max(15_000, capacity * 220 + numeric(row.area, 0) + numeric(row.engagement_metrics_n_followers, 0)),
+    facilityName,
+    latitude: numeric(row.latitude, 0),
+    longitude: numeric(row.longitude, 0),
+    capabilities,
+    specializedBeds: Object.fromEntries(capabilities.map((capability) => [capability, Math.max(0, Math.round(capacity / Math.max(8, capabilities.length * 12)))])),
+    operationalStatus: "Operational",
+    dataCompleteness: {
+      updatedDaysAgo: recent,
+      missingOperationalFields: Math.max(0, Math.round((100 - completeness) / 20)),
+      sourceConfidence: Math.max(0.1, Math.min(1, confidence / 100)),
+      hasRecentSurvey: recent <= 120,
+    },
+    distanceToTertiaryMinutes: Math.max(20, Math.min(180, 140 - confidence + (capabilities.length ? 0 : 28))),
+    facebookLink: stringValue(row.facebookLink, ""),
+    sourceUrls,
+    officialWebsite: stringValue(row.officialWebsite, ""),
+    officialPhone: stringValue(row.officialPhone, ""),
+    h3Index7: stringValue(row.h3_index_7, ""),
+    accuracyConfidence: confidence,
+    confidenceCategory: stringValue(row.confidence_category, ""),
+    semanticConsistencyScore: numeric(row.semantic_consistency_score, 0),
+    recentActivityScore: numeric(row.recent_activity_score, 0),
+    dataCompletenessScore: completeness,
+    sourceQualityScore: numeric(row.source_quality_score, 0),
+    hospitalDirectoryScore: numeric(row.hospital_directory_score, 0),
+    mismatchDetectionScore: numeric(row.mismatch_detection_score, 0),
+    source: stringValue(row.source, ""),
+    sourceTypes,
+  };
+}
+
+function capabilitiesFor(text: string) {
+  const lower = text.toLowerCase();
+  const caps = new Set<string>();
+  if (/cardio|cardiac|cath|angiography|angioplasty|coronary/.test(lower)) caps.add("Emergency Cardiology");
+  if (/maternal|obstetric|gynec|gynaec|pregnan|labour|delivery|fertility|ivf/.test(lower)) caps.add("Maternal ICU");
+  if (/emergency|trauma|critical|icu|surgery|burn|orthopedic|neurosurgery|ambulance|casualty/.test(lower)) caps.add("Trauma Care");
+  if (/neonatal|nicu|newborn|pediatric|paediatric|child/.test(lower)) caps.add("Neonatal ICU");
+  if (/oncology|cancer|chemo|radiation|hematology|haematology|transplant|palliative/.test(lower)) caps.add("Oncology Infusion");
+  if (!caps.size) caps.add("Trauma Care");
+  return Array.from(caps);
+}
+
+function parseArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function stringValue(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function numeric(value: unknown, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function daysSince(value: unknown) {
+  if (typeof value !== "string" || !value) return 180;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return 180;
+  return Math.max(0, Math.round((Date.now() - time) / 86_400_000));
 }
 
 async function databricksAccessToken(host: string) {
