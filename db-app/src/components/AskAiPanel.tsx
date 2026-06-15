@@ -15,11 +15,11 @@ interface Message {
 }
 
 const suggestions = [
-  "Find verified emergency medicine deserts in Rajasthan",
-  "Which districts need maternal ICU investment first?",
-  "Show data-poor cardiology regions that need a field survey",
-  "What is the best medium-budget intervention in Karnataka?",
-  "Find hospitals where dialysis access is life-threatening",
+  "Where are the highest-risk care gaps right now?",
+  "Which gaps are real versus just data-poor?",
+  "Show regions needing field verification before funding",
+  "Which district or PIN code has the weakest evidence?",
+  "Explain the facility evidence behind the top gap",
 ];
 
 export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProps) {
@@ -28,7 +28,7 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      text: `Ask about ${planningProfile.category.toLowerCase()} access, high-risk districts, data-poor regions, budget fit, or which hospital nodes should be audited first.`,
+      text: `Ask where ${planningProfile.category.toLowerCase()} access gaps are highest-risk, how confident the evidence is, which regions are data-poor, or which facility records should be audited first.`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -85,9 +85,9 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
         </span>
         <div>
           <p className="eyebrow">Ask AI</p>
-          <h2>Planning copilot for Indian care gaps</h2>
+          <h2>Medical desert evidence copilot</h2>
           <p>
-            Uses the current filters, top risk zones, specialty category, budget band, and life-criticality signals to answer planner questions.
+            Uses current filters, trust-weighted facility evidence, risk zones, specialty cost tier, and life-criticality signals to separate real care gaps from missing data.
           </p>
         </div>
       </div>
@@ -107,7 +107,7 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
         {loading && <div className="chat-message assistant">Reviewing the current planning context...</div>}
       </div>
       <form className="ask-composer" onSubmit={onSubmit}>
-        <input value={input} placeholder="Ask about zones, facilities, specialty cost, surveys, or interventions..." onChange={(event) => setInput(event.target.value)} />
+        <input value={input} placeholder="Ask about care gaps, confidence, weak evidence, audits, or interventions..." onChange={(event) => setInput(event.target.value)} />
         <button type="submit" aria-label="Send question">
           <Send size={18} />
         </button>
@@ -119,7 +119,7 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
 function localAnswer(question: string, regions: RegionAggregate[], profile: SpecialtyPlanningProfile, budgetDescription: string) {
   const top = regions[0];
   if (!top) return "No regions are in scope. Broaden the filters and ask again.";
-  return `Based on the current mock dataset, start with ${top.villageTown}, ${top.district}. It is classified as ${top.status} with risk ${top.riskScore}, trust ${top.trustScore}, ${top.population.toLocaleString("en-IN")} people, and ${top.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the selected specialty has life-criticality ${profile.lifeCriticality}/5, cost ${profile.costTier}/5, and expected lift ${profile.expectedLift}/5. With this budget band, prioritize: ${budgetDescription} Question interpreted: "${question}".`;
+  return `Based on the current mock dataset, start with ${top.villageTown}, ${top.district}. It is classified as ${top.status} with risk ${top.riskScore}, trust ${top.trustScore}, ${top.population.toLocaleString("en-IN")} people, and ${top.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the selected specialty has life-criticality ${profile.lifeCriticality}/5, cost ${profile.costTier}/5, and expected lift ${profile.expectedLift}/5. Based on that specialty cost tier, prioritize: ${budgetDescription} Question interpreted: "${question}".`;
 }
 
 function FormattedAssistantMessage({ text }: { text: string }) {

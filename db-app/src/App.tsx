@@ -14,7 +14,7 @@ import { ScenarioSidebar } from "./components/ScenarioSidebar";
 import { SpecialtyPlanningControls } from "./components/SpecialtyPlanningControls";
 import { costTierForProfile, hbpBenchmarkForProfile } from "./data/hbpRateList";
 import { generateHealthcareDataset } from "./data/mockHealthcare";
-import { budgetBandInfo, getDefaultProfile, getProfile } from "./data/specialtyPlanning";
+import { budgetInfoForProfile, getDefaultProfile, getProfile } from "./data/specialtyPlanning";
 import { ALL_VALUE, aggregateRegions, applyFilters, uniqueSorted } from "./lib/scoring";
 import type { Filters, PlanningScenario, RegionAggregate, RouteSummary } from "./types";
 
@@ -24,8 +24,8 @@ const initialFilters: Filters = {
   specialtyCategory: defaultProfile.category,
   specialtySubcategory: defaultProfile.subcategory,
   specialty: defaultProfile.specialty,
-  budgetBand: "Medium",
-  budgetCrore: budgetBandInfo("Medium").crore,
+  budgetBand: budgetInfoForProfile(defaultProfile).band,
+  budgetCrore: budgetInfoForProfile(defaultProfile).crore,
   keyword: "",
   state: ALL_VALUE,
   district: ALL_VALUE,
@@ -62,6 +62,11 @@ export default function App() {
       costTier: Math.max(baseProfile.costTier, costTierForProfile(baseProfile.category, baseProfile.specialty, benchmark)) as typeof baseProfile.costTier,
     };
   }, [filters.specialtyCategory, filters.specialtySubcategory, filters.specialty]);
+  const derivedBudget = useMemo(() => budgetInfoForProfile(planningProfile), [planningProfile]);
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, budgetBand: derivedBudget.band, budgetCrore: derivedBudget.crore }),
+    [filters, derivedBudget],
+  );
   const selectedRegion = useMemo(
     () => regions.find((region) => region.id === selectedRegionId) ?? regions[0],
     [regions, selectedRegionId],
@@ -119,7 +124,7 @@ export default function App() {
       id: crypto.randomUUID(),
       name: `${filters.specialty} / ${filters.state === ALL_VALUE ? "India" : filters.state}`,
       createdAt: new Date().toISOString(),
-      filters,
+      filters: effectiveFilters,
       flaggedRegionIds: flaggedIds,
       notes,
     };
@@ -153,7 +158,7 @@ export default function App() {
           <span className="voice-wheel" />
           <span>Medical Desert Planner</span>
         </div>
-        <PlannerSearchBar filters={filters} states={options.states} onChange={updateFilters} />
+        <PlannerSearchBar filters={effectiveFilters} states={options.states} onChange={updateFilters} />
         <div className="topbar-actions">
           <button className={`mode-button ${activeMode === "explore" ? "active" : ""}`} type="button" onClick={() => setActiveMode("explore")}>
             <Grid2X2 size={18} /> Explore
@@ -189,10 +194,10 @@ export default function App() {
               <aside className="filter-drawer">
           <div>
             <p className="eyebrow">Decision inputs</p>
-            <h2>Specialty, budget, place</h2>
+            <h2>Specialty, evidence, place</h2>
           </div>
-          <SpecialtyPlanningControls filters={filters} onChange={updateFilters} />
-          <RegionFilters filters={filters} options={options} onChange={updateFilters} />
+          <SpecialtyPlanningControls filters={effectiveFilters} onChange={updateFilters} />
+          <RegionFilters filters={effectiveFilters} options={options} onChange={updateFilters} />
               </aside>
 
               <div className="map-column">
@@ -217,7 +222,7 @@ export default function App() {
             {activeTab === "details" && <InspectionPanel region={selectedRegion} capability={filters.capability} />}
             {activeTab === "scenarios" && (
               <ScenarioSidebar
-                filters={filters}
+                filters={effectiveFilters}
                 flaggedIds={flaggedIds}
                 scenarios={scenarios}
                 notes={notes}
@@ -250,7 +255,7 @@ export default function App() {
             <button className="scenario-delete ask-close" type="button" aria-label="Close Ask AI" onClick={() => setShowAskAi(false)}>
               x
             </button>
-            <AskAiPanel filters={filters} regions={regions} planningProfile={planningProfile} />
+            <AskAiPanel filters={effectiveFilters} regions={regions} planningProfile={planningProfile} />
           </div>
         </div>
       )}

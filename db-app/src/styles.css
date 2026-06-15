@@ -106,7 +106,7 @@ main {
   max-width: 860px;
   min-width: 360px;
   display: grid;
-  grid-template-columns: 1fr 1.25fr 1.05fr auto 46px;
+  grid-template-columns: 1fr 1.25fr 1.05fr 46px;
   align-items: center;
   gap: 0;
   overflow: hidden;
@@ -146,24 +146,6 @@ main {
   color: var(--color-slate);
 }
 
-.budget-band-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 10px;
-  color: var(--color-slate);
-}
-
-.budget-band-control > span {
-  margin-right: 4px;
-  color: var(--color-slate);
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.budget-band-control button,
 .mode-button,
 .search-button {
   border: 0;
@@ -171,17 +153,6 @@ main {
   background: transparent;
   color: var(--color-cinder);
   font-weight: 850;
-}
-
-.budget-band-control button {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-.budget-band-control button.active {
-  background: var(--color-obsidian);
-  color: var(--color-eggshell);
 }
 
 .search-button {
@@ -408,8 +379,7 @@ main {
 }
 
 .field-label,
-.notes-label,
-.budget-slider {
+.notes-label {
   display: grid;
   gap: 8px;
   color: var(--color-gravel);
@@ -427,30 +397,6 @@ main {
   color: var(--color-obsidian);
   padding: 13px 14px;
   box-shadow: rgba(255, 255, 255, 0.72) 0 1px 0 inset;
-}
-
-.budget-slider {
-  padding: 14px;
-  border: 1px solid rgba(231, 223, 209, 0.95);
-  border-radius: 20px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 242, 0.78));
-  box-shadow: rgba(255, 255, 255, 0.72) 0 1px 0 inset, rgba(11, 32, 38, 0.06) 0 8px 20px;
-}
-
-.budget-slider strong {
-  color: var(--color-obsidian);
-  font-size: 30px;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-
-.budget-slider input {
-  width: 100%;
-  accent-color: var(--color-ember);
-}
-
-.budget-slider small {
-  color: var(--color-gravel);
 }
 
 .tool-stats {
@@ -2053,10 +1999,6 @@ main {
   .planner-search label {
     border-right: 0;
     border-bottom: 1px solid rgba(231, 223, 209, 0.8);
-  }
-
-  .budget-band-control {
-    padding: 10px;
   }
 
   .topbar-actions {

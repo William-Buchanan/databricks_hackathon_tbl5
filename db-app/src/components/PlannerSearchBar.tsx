@@ -1,7 +1,7 @@
-import { Search, SlidersHorizontal } from "lucide-react";
-import { budgetBandInfo, budgetBands, categoryNames, cleanedCategoryCounts, specialtiesForCategory } from "../data/specialtyPlanning";
+import { Search } from "lucide-react";
+import { categoryNames, cleanedCategoryCounts, specialtiesForCategory } from "../data/specialtyPlanning";
 import { ALL_VALUE } from "../lib/scoring";
-import type { BudgetBand, Filters } from "../types";
+import type { Filters } from "../types";
 
 interface PlannerSearchBarProps {
   filters: Filters;
@@ -19,10 +19,6 @@ export function PlannerSearchBar({ filters, states, onChange }: PlannerSearchBar
       specialty: specialty.specialty,
       capability: specialty.capability,
     });
-  }
-
-  function setBudgetBand(budgetBand: BudgetBand) {
-    onChange({ ...filters, budgetBand, budgetCrore: budgetBandInfo(budgetBand).crore });
   }
 
   return (
@@ -51,15 +47,6 @@ export function PlannerSearchBar({ filters, states, onChange }: PlannerSearchBar
         <span>Keywords</span>
         <input value={filters.keyword} placeholder="district, hospital, device..." onChange={(event) => onChange({ ...filters, keyword: event.target.value })} />
       </label>
-      <div className="budget-band-control" aria-label="Budget band">
-        <SlidersHorizontal size={16} />
-        <span>Budget</span>
-        {budgetBands.map((item) => (
-          <button key={item.band} type="button" className={filters.budgetBand === item.band ? "active" : ""} onClick={() => setBudgetBand(item.band)}>
-            {item.band}
-          </button>
-        ))}
-      </div>
       <button className="search-button" type="button" aria-label="Search">
         <Search size={19} />
       </button>

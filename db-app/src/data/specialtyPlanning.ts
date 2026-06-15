@@ -164,6 +164,16 @@ export function budgetBandInfo(band: BudgetBand) {
   return budgetBands.find((item) => item.band === band) ?? budgetBands[1];
 }
 
+export function budgetBandForCostTier(costTier: SpecialtyPlanningProfile["costTier"]): BudgetBand {
+  if (costTier <= 2) return "Low";
+  if (costTier === 3) return "Medium";
+  return "High";
+}
+
+export function budgetInfoForProfile(profile: SpecialtyPlanningProfile) {
+  return budgetBandInfo(budgetBandForCostTier(profile.costTier));
+}
+
 export function formatBudgetCrore(budgetCrore: number): string {
   if (budgetCrore < 1) return `₹${Math.round(budgetCrore * 100)}L`;
   return `₹${budgetCrore.toFixed(budgetCrore >= 10 ? 0 : 1)}Cr`;
