@@ -83,6 +83,26 @@ export interface SpecialtyPlanningProfile {
   costTier: 1 | 2 | 3 | 4 | 5;
   expectedLift: 1 | 2 | 3 | 4 | 5;
   rationale: string;
+  gbdEvidence: GbdLifeThreateningEvidence;
+}
+
+export interface GbdLifeThreateningEvidence {
+  plannerCategory: string;
+  plannerSubcategory: string;
+  plannerSpecialty: string;
+  primaryCause: string;
+  causeGroup: string;
+  preferredMeasure: string;
+  secondaryMeasure: string;
+  lifeThreateningScore: 1 | 2 | 3 | 4 | 5;
+  mortalityRelevance: 1 | 2 | 3 | 4 | 5;
+  yllRelevance: 1 | 2 | 3 | 4 | 5;
+  emergencySensitivity: 1 | 2 | 3 | 4 | 5;
+  scoreMethod: string;
+  sourceName: string;
+  sourceUrl: string;
+  extractScope: string;
+  notes: string;
 }
 
 export interface PlanningScenario {

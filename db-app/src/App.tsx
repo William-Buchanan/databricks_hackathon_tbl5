@@ -15,6 +15,7 @@ import { SpecialtyPlanningControls } from "./components/SpecialtyPlanningControl
 import { costTierForProfile, hbpBenchmarkForProfile } from "./data/hbpRateList";
 import { generateHealthcareDataset } from "./data/mockHealthcare";
 import { budgetInfoForProfile, getDefaultProfile, getProfile } from "./data/specialtyPlanning";
+import { logPlannerEvent } from "./lib/auditLog";
 import { ALL_VALUE, aggregateRegions, applyFilters, uniqueSorted } from "./lib/scoring";
 import type { Filters, PlanningScenario, RegionAggregate, RouteSummary } from "./types";
 
@@ -94,30 +95,66 @@ export default function App() {
     setSelectedRegionId(region.id);
     setHoveredRegionId(region.id);
     setRouteSummary(undefined);
-  }, []);
+    logPlannerEvent({
+      eventType: "region_selected",
+      payload: {
+        region: regionLogPayload(region),
+        filters: effectiveFilters,
+        planningProfile: profileLogPayload(planningProfile),
+      },
+    });
+  }, [effectiveFilters, planningProfile]);
 
   const openFlaggedRegion = useCallback((region: RegionAggregate) => {
     selectRegion(region);
     setActiveMode("globe");
     setActiveTab("zones");
     setShowFlags(false);
-  }, [selectRegion]);
+    logPlannerEvent({
+      eventType: "flagged_region_opened",
+      payload: {
+        region: regionLogPayload(region),
+        filters: effectiveFilters,
+        planningProfile: profileLogPayload(planningProfile),
+      },
+    });
+  }, [effectiveFilters, planningProfile, selectRegion]);
 
   const hoverRegion = useCallback((region: RegionAggregate) => {
     setHoveredRegionId(region.id);
   }, []);
 
   const toggleFlag = useCallback((id: string) => {
+    const region = regions.find((item) => item.id === id);
+    const flagged = flaggedIds.includes(id);
     setFlaggedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
-  }, []);
+    logPlannerEvent({
+      eventType: flagged ? "flag_removed" : "flag_added",
+      payload: {
+        region: region ? regionLogPayload(region) : { id },
+        filters: effectiveFilters,
+        planningProfile: profileLogPayload(planningProfile),
+      },
+    });
+  }, [effectiveFilters, flaggedIds, planningProfile, regions]);
 
   const handleRouteSummary = useCallback((summary: RouteSummary | undefined) => {
     setRouteSummary(summary);
     if (summary?.destinationRegionId) {
       setHoveredRegionId(summary.destinationRegionId);
       setSelectedRegionId(summary.destinationRegionId);
+      const region = regions.find((item) => item.id === summary.destinationRegionId);
+      logPlannerEvent({
+        eventType: "route_calculated",
+        payload: {
+          route: summary,
+          region: region ? regionLogPayload(region) : { id: summary.destinationRegionId },
+          filters: effectiveFilters,
+          planningProfile: profileLogPayload(planningProfile),
+        },
+      });
     }
-  }, []);
+  }, [effectiveFilters, planningProfile, regions]);
 
   function saveScenario() {
     const scenario: PlanningScenario = {
@@ -130,6 +167,14 @@ export default function App() {
     };
     setScenarios((current) => [scenario, ...current].slice(0, 8));
     setNotes("");
+    logPlannerEvent({
+      eventType: "scenario_saved",
+      payload: {
+        scenario,
+        flaggedRegions: flaggedRegions.map(regionLogPayload),
+        planningProfile: profileLogPayload(planningProfile),
+      },
+    });
   }
 
   function openScenario(scenario: PlanningScenario) {
@@ -138,13 +183,35 @@ export default function App() {
     setNotes(scenario.notes);
     setSelectedRegionId(scenario.flaggedRegionIds[0]);
     setActiveTab("scenarios");
+    logPlannerEvent({
+      eventType: "scenario_opened",
+      payload: {
+        scenario,
+        planningProfile: profileLogPayload(planningProfile),
+      },
+    });
   }
 
   function deleteScenario(id: string) {
+    const scenario = scenarios.find((item) => item.id === id);
     setScenarios((current) => current.filter((scenario) => scenario.id !== id));
+    logPlannerEvent({
+      eventType: "scenario_deleted",
+      payload: {
+        scenarioId: id,
+        scenario,
+      },
+    });
   }
 
   function updateFilters(next: Filters) {
+    logPlannerEvent({
+      eventType: "filters_changed",
+      payload: {
+        previous: effectiveFilters,
+        next,
+      },
+    });
     setFilters(next);
     setSelectedRegionId(undefined);
     setHoveredRegionId(undefined);
@@ -166,7 +233,20 @@ export default function App() {
           <button className={`mode-button ${activeMode === "globe" ? "active" : ""}`} type="button" onClick={() => setActiveMode("globe")}>
             <Globe2 size={18} /> Globe
           </button>
-          <button className={`mode-button ${showAskAi ? "active" : ""}`} type="button" onClick={() => setShowAskAi((value) => !value)}>
+          <button
+            className={`mode-button ${showAskAi ? "active" : ""}`}
+            type="button"
+            onClick={() => {
+              setShowAskAi((value) => !value);
+              logPlannerEvent({
+                eventType: showAskAi ? "ask_ai_closed" : "ask_ai_opened",
+                payload: {
+                  filters: effectiveFilters,
+                  planningProfile: profileLogPayload(planningProfile),
+                },
+              });
+            }}
+          >
             <Bot size={18} /> Ask AI
           </button>
         </div>
@@ -241,7 +321,18 @@ export default function App() {
           planningProfile={planningProfile}
           isFlagged={contextRegion ? flaggedIds.includes(contextRegion.id) : false}
           onToggleFlag={toggleFlag}
-          onOpenHbpTable={() => setShowHbpTable(true)}
+          onOpenHbpTable={() => {
+            setShowHbpTable(true);
+            logPlannerEvent({
+              eventType: "hbp_estimate_opened",
+              payload: {
+                region: contextRegion ? regionLogPayload(contextRegion) : undefined,
+                filters: effectiveFilters,
+                planningProfile: profileLogPayload(planningProfile),
+                hbpBenchmark: hbpBenchmarkForProfile(planningProfile.category, planningProfile.specialty),
+              },
+            });
+          }}
               />
             </section>
           )}
@@ -311,6 +402,37 @@ export default function App() {
       )}
     </main>
   );
+}
+
+function regionLogPayload(region: RegionAggregate) {
+  return {
+    id: region.id,
+    villageTown: region.villageTown,
+    district: region.district,
+    state: region.state,
+    pinCode: region.pinCode,
+    status: region.status,
+    riskScore: region.riskScore,
+    trustScore: region.trustScore,
+    population: region.population,
+    nearestTertiaryMinutes: region.nearestTertiaryMinutes,
+    facilityCount: region.facilityCount,
+    capableFacilityCount: region.capableFacilityCount,
+    capableBeds: region.capableBeds,
+  };
+}
+
+function profileLogPayload(profile: typeof defaultProfile) {
+  return {
+    category: profile.category,
+    subcategory: profile.subcategory,
+    specialty: profile.specialty,
+    capability: profile.capability,
+    lifeCriticality: profile.lifeCriticality,
+    costTier: profile.costTier,
+    expectedLift: profile.expectedLift,
+    gbdEvidence: profile.gbdEvidence,
+  };
 }
 
 function applyKeyword(records: ReturnType<typeof generateHealthcareDataset>, keyword: string) {

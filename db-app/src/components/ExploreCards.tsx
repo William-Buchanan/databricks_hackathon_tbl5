@@ -65,7 +65,8 @@ export function ExploreCards({ facilities, regions, selectedId, planningProfile,
               </div>
               <div className="capability-chips">
                 <span>{planningProfile.category}</span>
-                <span>Life-critical {planningProfile.lifeCriticality}/5</span>
+                <span>GBD life-threat {planningProfile.lifeCriticality}/5</span>
+                <span>{planningProfile.gbdEvidence.primaryCause}</span>
               </div>
               <a className="facebook-card-link" href={sourceCard.facebookLink} target="_blank" rel="noreferrer">
                 <Facebook size={15} /> Facebook profile <ExternalLink size={13} />

@@ -1,5 +1,6 @@
 import type { BudgetBand, SpecialtyPlanningProfile } from "../types";
 import { cleanedSpecialtyCatalog } from "./cleanedSpecialtyCatalog";
+import { applyGbdEvidence } from "./gbdLifeThreatening";
 
 export const interventionLevels: Array<{ label: string; minCrore: number; maxCrore: number; capacity: 1 | 2 | 3 | 4 | 5; description: string }> = [
   { label: "Audit + referral routing", minCrore: 0, maxCrore: 0.25, capacity: 1, description: "Survey, data cleanup, referral protocol, basic equipment" },
@@ -202,7 +203,7 @@ function profile(
   expectedLift: SpecialtyPlanningProfile["expectedLift"],
   rationale: string,
 ): SpecialtyPlanningProfile {
-  return { category, subcategory, specialty, capability, lifeCriticality, costTier, expectedLift, rationale };
+  return applyGbdEvidence({ category, subcategory, specialty, capability, lifeCriticality, costTier, expectedLift, rationale });
 }
 
 function categoryDefaultProfile(category: string): SpecialtyPlanningProfile {

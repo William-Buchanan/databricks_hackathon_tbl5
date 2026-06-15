@@ -28,7 +28,7 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      text: `Ask where ${planningProfile.category.toLowerCase()} access gaps are highest-risk, how confident the evidence is, which regions are data-poor, or which facility records should be audited first.`,
+      text: `Ask where ${planningProfile.category.toLowerCase()} access gaps are highest-risk, how confident the evidence is, which regions are data-poor, or how the GBD life-threatening score affects priority.`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -119,7 +119,7 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
 function localAnswer(question: string, regions: RegionAggregate[], profile: SpecialtyPlanningProfile, budgetDescription: string) {
   const top = regions[0];
   if (!top) return "No regions are in scope. Broaden the filters and ask again.";
-  return `Based on the current mock dataset, start with ${top.villageTown}, ${top.district}. It is classified as ${top.status} with risk ${top.riskScore}, trust ${top.trustScore}, ${top.population.toLocaleString("en-IN")} people, and ${top.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the selected specialty has life-criticality ${profile.lifeCriticality}/5, cost ${profile.costTier}/5, and expected lift ${profile.expectedLift}/5. Based on that specialty cost tier, prioritize: ${budgetDescription} Question interpreted: "${question}".`;
+  return `Based on the current mock dataset, start with ${top.villageTown}, ${top.district}. It is classified as ${top.status} with risk ${top.riskScore}, trust ${top.trustScore}, ${top.population.toLocaleString("en-IN")} people, and ${top.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the GBD life-threatening score is ${profile.lifeCriticality}/5 using ${profile.gbdEvidence.primaryCause} and ${profile.gbdEvidence.preferredMeasure}; mortality relevance is ${profile.gbdEvidence.mortalityRelevance}/5 and YLL (years of life lost) relevance is ${profile.gbdEvidence.yllRelevance}/5. Cost is ${profile.costTier}/5 and expected lift is ${profile.expectedLift}/5. Based on that specialty cost tier, prioritize: ${budgetDescription} Question interpreted: "${question}".`;
 }
 
 function FormattedAssistantMessage({ text }: { text: string }) {

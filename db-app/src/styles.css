@@ -700,6 +700,60 @@ main {
   color: var(--color-gravel);
 }
 
+.gbd-evidence-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(236, 253, 245, 0.84), rgba(255, 255, 255, 0.78));
+}
+
+.gbd-evidence-card.compact {
+  padding: 13px;
+}
+
+.gbd-evidence-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gbd-evidence-card div span {
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 9999px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--color-cinder);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gbd-evidence-card > span {
+  color: var(--color-obsidian);
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+.gbd-evidence-card p {
+  margin: 0;
+  color: var(--color-gravel);
+  font-size: 13px;
+}
+
+.gbd-evidence-card small,
+.gbd-evidence-card a {
+  color: var(--color-gravel);
+}
+
+.gbd-evidence-card a {
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .cost-benchmark-cell {
   display: grid;
   gap: 4px;

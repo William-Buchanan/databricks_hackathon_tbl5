@@ -41,12 +41,28 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
         <span>{region.trustScore}/100</span>
       </div>
       <div className="investment-card">
-        <strong>Life-threatening score</strong>
+        <strong>GBD life-threatening score</strong>
         <span>{planningProfile.lifeCriticality}/5 for {planningProfile.specialty}</span>
+        <small>
+          {planningProfile.gbdEvidence.primaryCause} · {planningProfile.gbdEvidence.preferredMeasure}
+        </small>
+      </div>
+      <div className="gbd-evidence-card">
+        <strong>GBD evidence basis</strong>
+        <div>
+          <span>Mortality {planningProfile.gbdEvidence.mortalityRelevance}/5</span>
+          <span>YLL (years of life lost) {planningProfile.gbdEvidence.yllRelevance}/5</span>
+          <span>Emergency {planningProfile.gbdEvidence.emergencySensitivity}/5</span>
+        </div>
+        <p>{planningProfile.gbdEvidence.notes}</p>
+        <a href={planningProfile.gbdEvidence.sourceUrl} target="_blank" rel="noreferrer">
+          {planningProfile.gbdEvidence.sourceName}
+        </a>
       </div>
       <div className="cost-benchmark-cell">
         <button className="cost-benchmark-link" type="button" onClick={onOpenHbpTable}>
-          <span>{formatInrRange(hbpBenchmark.low, hbpBenchmark.high)} package benchmark</span>
+          <strong>AB PM-JAY estimate</strong>
+          <span>{formatInrRange(hbpBenchmark.low, hbpBenchmark.high)} INR package benchmark</span>
           <small>{HBP_RATE_LIST_LABEL}</small>
         </button>
       </div>
