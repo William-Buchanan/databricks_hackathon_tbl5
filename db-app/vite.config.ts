@@ -170,11 +170,6 @@ async function handleFacilities(request: any, response: any) {
       `SELECT
         unique_id,
         name,
-        organization_type,
-        phone_numbers,
-        officialPhone,
-        email,
-        websites,
         officialWebsite,
         facebookLink,
         address_city,
@@ -182,13 +177,11 @@ async function handleFacilities(request: any, response: any) {
         address_zipOrPostcode,
         facilityTypeId,
         operatorTypeId,
-        description,
+        substr(description, 1, 1200) AS description,
         area,
         numberDoctors,
         capacity,
         specialties,
-        procedure,
-        equipment,
         capability,
         recency_of_page_update,
         distinct_social_media_presence_count,
@@ -198,7 +191,6 @@ async function handleFacilities(request: any, response: any) {
         latitude,
         longitude,
         cluster_id,
-        source_urls,
         in_hospital_directory,
         semantic_consistency_score,
         recent_activity_score,
@@ -209,13 +201,16 @@ async function handleFacilities(request: any, response: any) {
         accuracy_confidence,
         confidence_category,
         h3_index_7,
-        source,
-        source_types
+        source
       FROM workspace.silver.facilities_with_confidence_score_and_h3
       WHERE address_countryCode = 'IN'
         AND latitude IS NOT NULL
         AND longitude IS NOT NULL
-      LIMIT 5000`,
+      ORDER BY
+        CASE WHEN h3_index_7 IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN facebookLink IS NOT NULL THEN 0 ELSE 1 END,
+        accuracy_confidence DESC
+      LIMIT 2000`,
       [],
     );
     response.setHeader("Content-Type", "application/json");
@@ -442,11 +437,9 @@ async function executeSqlRows(warehouseId: string, statement: string, parameters
 
 function mapFacilityRow(row: Record<string, any>) {
   const sourceUrls = parseArray(row.source_urls);
-  const sourceTypes = parseArray(row.source_types);
+  const sourceTypes: string[] = [];
   const specialties = parseArray(row.specialties);
-  const procedures = parseArray(row.procedure);
-  const equipment = parseArray(row.equipment);
-  const capabilities = capabilitiesFor([...specialties, ...procedures, ...equipment, row.capability, row.description].join(" "));
+  const capabilities = capabilitiesFor([...specialties, row.capability, row.description].join(" "));
   const confidence = numeric(row.accuracy_confidence, 50);
   const completeness = numeric(row.data_completeness_score, confidence);
   const recent = daysSince(row.recency_of_page_update);
