@@ -11,6 +11,10 @@ resources:
           sql_warehouse:
             id: d117c0ca6fa3e29c
             permission: CAN_USE
+        - name: facilities-source-table
+          table:
+            name: workspace.silver.facilities_with_confidence_score_and_h3
+            permission: SELECT
       config:
         command:
           - npm
