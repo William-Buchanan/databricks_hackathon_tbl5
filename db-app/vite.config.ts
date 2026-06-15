@@ -158,7 +158,7 @@ async function handleFacilities(request: any, response: any) {
   }
 
   const warehouseId = process.env.DATABRICKS_WAREHOUSE_ID;
-  if (!warehouseId || !process.env.DATABRICKS_HOST) {
+  if (!warehouseId || !databricksHost()) {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ records: [], source: "fallback", error: "DATABRICKS_WAREHOUSE_ID or DATABRICKS_HOST is not configured." }));
     return;
@@ -287,7 +287,7 @@ async function writeAuditEvent(request: any, eventType: string, payload: Record<
     payload_json: JSON.stringify(payload),
   };
 
-  if (!tableName || !warehouseId || !process.env.DATABRICKS_HOST) {
+  if (!tableName || !warehouseId || !databricksHost()) {
     console.log(JSON.stringify({ planner_audit_log: event }));
     return;
   }
@@ -315,7 +315,7 @@ async function writeAuditEvent(request: any, eventType: string, payload: Record<
 
 async function currentUserIdentity(request: any) {
   const oboToken = headerValue(request, ["x-forwarded-access-token"]);
-  const host = process.env.DATABRICKS_HOST?.replace(/\/$/, "");
+  const host = databricksHost();
   if (!oboToken || !host) return { email: "", name: "" };
 
   const cached = userIdentityCache.get(oboToken);
@@ -371,7 +371,7 @@ function insertSql(tableName: string) {
 }
 
 async function executeSql(warehouseId: string, statement: string, parameters: Array<{ name: string; value: string; type: string }>) {
-  const host = process.env.DATABRICKS_HOST?.replace(/\/$/, "");
+  const host = databricksHost();
   if (!host) throw new Error("DATABRICKS_HOST is not configured.");
   const token = await databricksAccessToken(host);
   const response = await fetch(`${host}/api/2.0/sql/statements`, {
@@ -395,7 +395,7 @@ async function executeSql(warehouseId: string, statement: string, parameters: Ar
 }
 
 async function executeSqlRows(warehouseId: string, statement: string, parameters: Array<{ name: string; value: string; type: string }>) {
-  const host = process.env.DATABRICKS_HOST?.replace(/\/$/, "");
+  const host = databricksHost();
   if (!host) throw new Error("DATABRICKS_HOST is not configured.");
   const token = await databricksAccessToken(host);
   const response = await fetch(`${host}/api/2.0/sql/statements`, {
@@ -563,6 +563,13 @@ async function databricksAccessToken(host: string) {
     expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
   return cachedToken.accessToken;
+}
+
+function databricksHost() {
+  const raw = process.env.DATABRICKS_HOST?.trim();
+  if (!raw) return "";
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.replace(/\/$/, "");
 }
 
 function qualifiedTableName(tableName: string) {
