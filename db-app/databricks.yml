@@ -6,11 +6,21 @@ resources:
     medical_desert_planner:
       name: medical-desert-planner
       source_code_path: .
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: d117c0ca6fa3e29c
+            permission: CAN_USE
       config:
         command:
           - npm
           - run
           - start
+        env:
+          - name: DATABRICKS_WAREHOUSE_ID
+            valueFrom: sql-warehouse
+          - name: APP_LOG_TABLE
+            value: workspace.default.user_logs
 
 targets:
   dev:

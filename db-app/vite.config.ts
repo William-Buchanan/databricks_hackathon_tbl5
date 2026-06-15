@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  Object.entries(env).forEach(([key, value]) => {
+    process.env[key] ??= value;
+  });
   return {
     plugins: [react(), askAiPlugin(env.OPENAI_API_KEY)],
   };
