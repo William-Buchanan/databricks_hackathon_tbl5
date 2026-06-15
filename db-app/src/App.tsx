@@ -64,7 +64,7 @@ export default function App() {
         if (cancelled) return;
         if (data.records?.length) {
           setDataset(data.records);
-          setDatasetSource(data.source ?? "workspace.silver.facilities_with_confidence_score_and_h3");
+          setDatasetSource(data.source ?? "workspace.gold.facilities_with_confidence_score");
           logPlannerEvent({
             eventType: "facility_dataset_loaded",
             payload: {
@@ -310,6 +310,9 @@ export default function App() {
       <header className="app-header">
         <h1>Find the highest-risk care gaps.</h1>
         <span className="source-badge">Data: {datasetSource}</span>
+        <small className="source-note">
+          Using UC gold tables: workspace.gold.facilities_with_confidence_score and workspace.gold.hospitals_per_h3_and_density_ratio
+        </small>
       </header>
 
       <section className="planner-layout full-width">

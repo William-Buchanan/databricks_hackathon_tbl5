@@ -203,6 +203,15 @@ main {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.source-note,
+.matrix-header-tools small {
+  max-width: min(100%, 760px);
+  color: var(--color-gravel);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .app-header {
   display: grid;
   gap: 8px;
@@ -1418,6 +1427,21 @@ main {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   padding: 0 16px 16px;
+}
+
+.density-evidence {
+  display: grid;
+  gap: 5px;
+  margin: 0 16px 16px;
+  padding: 13px 14px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 16px;
+  background: rgba(239, 246, 255, 0.72);
+}
+
+.density-evidence span,
+.density-evidence small {
+  color: var(--color-gravel);
 }
 
 .facility-table {

@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { randomUUID } from "node:crypto";
+import { latLngToCell } from "h3-js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -168,58 +169,97 @@ async function handleFacilities(request: any, response: any) {
     const result = await executeSqlRows(
       warehouseId,
       `SELECT
-        unique_id,
-        name,
-        officialWebsite,
-        facebookLink,
-        address_city,
-        address_stateOrRegion,
-        address_zipOrPostcode,
-        facilityTypeId,
-        operatorTypeId,
-        substr(description, 1, 1200) AS description,
-        area,
-        numberDoctors,
-        capacity,
-        specialties,
-        capability,
-        recency_of_page_update,
-        distinct_social_media_presence_count,
-        affiliated_staff_presence,
-        custom_logo_presence,
-        number_of_facts_about_the_organization,
-        latitude,
-        longitude,
-        cluster_id,
-        in_hospital_directory,
-        semantic_consistency_score,
-        recent_activity_score,
-        data_completeness_score,
-        source_quality_score,
-        hospital_directory_score,
-        mismatch_detection_score,
-        accuracy_confidence,
-        confidence_category,
-        h3_index_7,
-        source
-      FROM workspace.silver.facilities_with_confidence_score_and_h3
-      WHERE address_countryCode = 'IN'
-        AND latitude IS NOT NULL
-        AND longitude IS NOT NULL
+        f.unique_id,
+        f.source_types,
+        f.name,
+        f.officialPhone,
+        f.officialWebsite,
+        f.facebookLink,
+        f.source_urls,
+        f.address_city,
+        f.address_stateOrRegion,
+        f.address_zipOrPostcode,
+        f.facilityTypeId,
+        f.operatorTypeId,
+        substr(f.description, 1, 1200) AS description,
+        f.area,
+        f.numberDoctors,
+        f.capacity,
+        f.specialties,
+        f.capability,
+        f.recency_of_page_update,
+        f.distinct_social_media_presence_count,
+        f.affiliated_staff_presence,
+        f.custom_logo_presence,
+        f.number_of_facts_about_the_organization,
+        f.latitude,
+        f.longitude,
+        f.cluster_id,
+        f.semantic_consistency_score,
+        f.recent_activity_score,
+        f.data_completeness_score,
+        f.source_quality_score,
+        f.mismatch_detection_score,
+        f.accuracy_confidence,
+        f.confidence_category,
+        f.source,
+        f.engagement_metrics_n_followers
+      FROM workspace.gold.facilities_with_confidence_score f
+      WHERE f.address_countryCode = 'IN'
+        AND f.latitude IS NOT NULL
+        AND f.longitude IS NOT NULL
       ORDER BY
-        CASE WHEN h3_index_7 IS NOT NULL THEN 0 ELSE 1 END,
-        CASE WHEN facebookLink IS NOT NULL THEN 0 ELSE 1 END,
-        accuracy_confidence DESC
+        CASE WHEN f.facebookLink IS NOT NULL THEN 0 ELSE 1 END,
+        f.accuracy_confidence DESC
       LIMIT 2000`,
       [],
     );
+    const densityByH3 = await fetchH3DensityMetrics(warehouseId, result.rows);
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ records: result.rows.map(mapFacilityRow), source: "workspace.silver.facilities_with_confidence_score_and_h3" }));
+    response.end(JSON.stringify({ records: result.rows.map((row) => mapFacilityRow(row, densityByH3)), source: "workspace.gold.facilities_with_confidence_score + workspace.gold.hospitals_per_h3_and_density_ratio" }));
   } catch (error) {
     console.error(JSON.stringify({ facilities_query_error: (error as Error).message }));
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ records: [], source: "fallback", error: (error as Error).message }));
   }
+}
+
+async function fetchH3DensityMetrics(warehouseId: string, rows: Array<Record<string, any>>) {
+  const h3Ids = Array.from(new Set(rows.map(h3Index7ForRow).filter((id): id is string => /^[0-9a-f]{15}$/i.test(id))));
+  if (!h3Ids.length) return new Map<string, H3DensityMetricRow>();
+
+  const idList = h3Ids.map((id) => `'${id}'`).join(", ");
+  const result = await executeSqlRows(
+    warehouseId,
+    `SELECT
+      h3_index_7,
+      unique_hospital_count,
+      population_density_per_km2,
+      hospital_to_population_density_ratio,
+      normalized_hosp_pop_ratio
+    FROM workspace.gold.hospitals_per_h3_and_density_ratio
+    WHERE h3_index_7 IN (${idList})`,
+    [],
+  );
+
+  return new Map<string, H3DensityMetricRow>(
+    result.rows
+      .map((row) => {
+        const h3Index7 = stringValue(row.h3_index_7, "");
+        if (!h3Index7) return undefined;
+        return [
+          h3Index7,
+          {
+            h3Index7,
+            uniqueHospitalCount: numeric(row.unique_hospital_count, 0),
+            populationDensityPerKm2: numeric(row.population_density_per_km2, 0),
+            hospitalToPopulationDensityRatio: numeric(row.hospital_to_population_density_ratio, 0),
+            normalizedHospPopRatio: numeric(row.normalized_hosp_pop_ratio, 0),
+          },
+        ] as const;
+      })
+      .filter((entry): entry is readonly [string, H3DensityMetricRow] => Boolean(entry)),
+  );
 }
 
 function envModel() {
@@ -389,7 +429,7 @@ async function executeSql(warehouseId: string, statement: string, parameters: Ar
   }
 }
 
-async function executeSqlRows(warehouseId: string, statement: string, parameters: Array<{ name: string; value: string; type: string }>) {
+async function executeSqlRows(warehouseId: string, statement: string, parameters: Array<{ name: string; value: string; type: string }>): Promise<{ columns: string[]; rows: Array<Record<string, any>> }> {
   const host = databricksHost();
   if (!host) throw new Error("DATABRICKS_HOST is not configured.");
   const token = await databricksAccessToken(host);
@@ -435,9 +475,17 @@ async function executeSqlRows(warehouseId: string, statement: string, parameters
   return { columns, rows };
 }
 
-function mapFacilityRow(row: Record<string, any>) {
+interface H3DensityMetricRow {
+  h3Index7: string;
+  uniqueHospitalCount: number;
+  populationDensityPerKm2: number;
+  hospitalToPopulationDensityRatio: number;
+  normalizedHospPopRatio: number;
+}
+
+function mapFacilityRow(row: Record<string, any>, densityByH3 = new Map<string, H3DensityMetricRow>()) {
   const sourceUrls = parseArray(row.source_urls);
-  const sourceTypes: string[] = [];
+  const sourceTypes = parseArray(row.source_types);
   const specialties = parseArray(row.specialties);
   const capabilities = capabilitiesFor([...specialties, row.capability, row.description].join(" "));
   const confidence = numeric(row.accuracy_confidence, 50);
@@ -445,6 +493,8 @@ function mapFacilityRow(row: Record<string, any>) {
   const recent = daysSince(row.recency_of_page_update);
   const capacity = numeric(row.capacity, 0);
   const facilityName = stringValue(row.name, "Unnamed facility");
+  const h3Index7 = h3Index7ForRow(row);
+  const h3DensityMetrics = h3Index7 ? densityByH3.get(h3Index7) : undefined;
 
   return {
     id: stringValue(row.unique_id, stringValue(row.cluster_id, facilityName)).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
@@ -472,7 +522,8 @@ function mapFacilityRow(row: Record<string, any>) {
     sourceUrls,
     officialWebsite: stringValue(row.officialWebsite, ""),
     officialPhone: stringValue(row.officialPhone, ""),
-    h3Index7: stringValue(row.h3_index_7, ""),
+    h3Index7,
+    h3DensityMetrics,
     accuracyConfidence: confidence,
     confidenceCategory: stringValue(row.confidence_category, ""),
     semanticConsistencyScore: numeric(row.semantic_consistency_score, 0),
@@ -484,6 +535,15 @@ function mapFacilityRow(row: Record<string, any>) {
     source: stringValue(row.source, ""),
     sourceTypes,
   };
+}
+
+function h3Index7ForRow(row: Record<string, any>) {
+  const existing = stringValue(row.h3_index_7, "");
+  if (existing) return existing;
+  const latitude = numeric(row.latitude, Number.NaN);
+  const longitude = numeric(row.longitude, Number.NaN);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "";
+  return latLngToCell(latitude, longitude, 7);
 }
 
 function capabilitiesFor(text: string) {

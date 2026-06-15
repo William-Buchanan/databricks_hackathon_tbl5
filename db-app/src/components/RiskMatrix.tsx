@@ -23,7 +23,8 @@ export function RiskMatrix({ regions, selectedId, onSelect, onHover }: RiskMatri
           <h2>Separate deserts from missing evidence.</h2>
         </div>
         <div className="matrix-header-tools">
-          <span className="source-badge">Mock India dataset</span>
+          <span className="source-badge">H3 density-adjusted</span>
+          <small>UC gold: workspace.gold.facilities_with_confidence_score + workspace.gold.hospitals_per_h3_and_density_ratio</small>
         </div>
       </div>
       <div className="matrix">

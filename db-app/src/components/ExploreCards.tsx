@@ -67,6 +67,7 @@ export function ExploreCards({ facilities, regions, selectedId, planningProfile,
                 <span>GBD life-threat {planningProfile.lifeCriticality}/5</span>
                 <span>{planningProfile.gbdEvidence.primaryCause}</span>
                 {facility.h3Index7 && <span>H3 {facility.h3Index7}</span>}
+                {facility.h3DensityMetrics && <span>{Math.round(facility.h3DensityMetrics.populationDensityPerKm2).toLocaleString("en-IN")}/km2</span>}
               </div>
               {externalLink && (
                 <a className="facebook-card-link" href={externalLink} target="_blank" rel="noreferrer">

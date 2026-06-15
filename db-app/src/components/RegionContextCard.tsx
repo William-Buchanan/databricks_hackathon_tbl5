@@ -45,6 +45,13 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
         <strong>Facility evidence</strong>
         <span>{region.facilities[0]?.confidenceCategory || "Confidence category unavailable"}</span>
       </div>
+      {region.h3DensityMetrics && (
+        <div className="investment-card">
+          <strong>H3 density coverage</strong>
+          <span>{region.h3DensityMetrics.uniqueHospitalCount} hospitals · {Math.round(region.h3DensityMetrics.populationDensityPerKm2).toLocaleString("en-IN")}/km2</span>
+          <small>Ratio {formatRatio(region.h3DensityMetrics.hospitalToPopulationDensityRatio)} · normalized {region.h3DensityMetrics.normalizedHospPopRatio.toFixed(3)}</small>
+        </div>
+      )}
       <div className="investment-card">
         <strong>GBD life-threatening score</strong>
         <span>{planningProfile.lifeCriticality}/5 for {planningProfile.specialty}</span>
@@ -98,6 +105,12 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
       )}
     </aside>
   );
+}
+
+function formatRatio(value: number): string {
+  if (!Number.isFinite(value)) return "unavailable";
+  if (value === 0) return "0";
+  return value < 0.01 ? value.toExponential(2) : value.toFixed(3);
 }
 
 function hospitalName(region: RegionAggregate): string {

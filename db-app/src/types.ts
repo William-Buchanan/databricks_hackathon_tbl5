@@ -44,6 +44,7 @@ export interface FacilityRecord {
   officialWebsite?: string;
   officialPhone?: string;
   h3Index7?: string;
+  h3DensityMetrics?: H3DensityMetrics;
   accuracyConfidence?: number;
   confidenceCategory?: string;
   semanticConsistencyScore?: number;
@@ -54,6 +55,14 @@ export interface FacilityRecord {
   mismatchDetectionScore?: number;
   source?: string;
   sourceTypes?: string[];
+}
+
+export interface H3DensityMetrics {
+  h3Index7: string;
+  uniqueHospitalCount: number;
+  populationDensityPerKm2: number;
+  hospitalToPopulationDensityRatio: number;
+  normalizedHospPopRatio: number;
 }
 
 export interface RegionAggregate {
@@ -73,6 +82,7 @@ export interface RegionAggregate {
   riskScore: number;
   status: MatrixStatus;
   nearestTertiaryMinutes: number;
+  h3DensityMetrics?: H3DensityMetrics;
   facilities: FacilityRecord[];
 }
 

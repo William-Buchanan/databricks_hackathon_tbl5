@@ -1,4 +1,4 @@
-import type { Capability, FacilityRecord, Filters, MatrixStatus, RegionAggregate } from "../types";
+import type { Capability, FacilityRecord, Filters, H3DensityMetrics, MatrixStatus, RegionAggregate } from "../types";
 
 export const ALL_VALUE = "All";
 
@@ -25,11 +25,13 @@ function trustFor(record: FacilityRecord): number {
   return clamp((freshness * 0.32 + fieldCompleteness * 0.26 + record.dataCompleteness.sourceConfidence * 0.34 + surveyBoost - statusPenalty) * 100);
 }
 
-function riskFor(population: number, beds: number, capableFacilities: number, nearestTertiaryMinutes: number): number {
+function riskFor(population: number, beds: number, capableFacilities: number, nearestTertiaryMinutes: number, h3DensityMetrics?: H3DensityMetrics): number {
   const demandPressure = Math.min(1, population / Math.max(1, beds * 18000));
   const scarcity = capableFacilities === 0 ? 1 : Math.min(1, 1 / capableFacilities);
   const travel = Math.min(1, nearestTertiaryMinutes / 150);
-  return clamp((demandPressure * 0.46 + scarcity * 0.28 + travel * 0.26) * 100);
+  if (!h3DensityMetrics) return clamp((demandPressure * 0.46 + scarcity * 0.28 + travel * 0.26) * 100);
+  const h3Pressure = h3DensityPressure(h3DensityMetrics);
+  return clamp((demandPressure * 0.4 + scarcity * 0.24 + travel * 0.22 + h3Pressure * 0.14) * 100);
 }
 
 function classify(riskScore: number, trustScore: number): MatrixStatus {
@@ -54,7 +56,8 @@ export function aggregateRegions(records: FacilityRecord[], capability: Capabili
       const capableBeds = capableFacilities.reduce((sum, f) => sum + (f.specializedBeds[capability] ?? 0), 0);
       const trustScore = Math.round(facilities.reduce((sum, f) => sum + trustFor(f), 0) / facilities.length);
       const nearestTertiaryMinutes = Math.min(...facilities.map((f) => f.distanceToTertiaryMinutes));
-      const riskScore = Math.round(riskFor(population, capableBeds, capableFacilities.length, nearestTertiaryMinutes));
+      const h3DensityMetrics = aggregateH3DensityMetrics(facilities);
+      const riskScore = Math.round(riskFor(population, capableBeds, capableFacilities.length, nearestTertiaryMinutes, h3DensityMetrics));
       return {
         id: `${state}-${district}-${subDistrict}-${pinCode}-${villageTown}`.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         state,
@@ -72,10 +75,38 @@ export function aggregateRegions(records: FacilityRecord[], capability: Capabili
         riskScore,
         status: classify(riskScore, trustScore),
         nearestTertiaryMinutes,
+        h3DensityMetrics,
         facilities,
       };
     })
     .sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore);
+}
+
+function aggregateH3DensityMetrics(facilities: FacilityRecord[]): H3DensityMetrics | undefined {
+  const byH3 = new Map<string, H3DensityMetrics>();
+  facilities.forEach((facility) => {
+    if (!facility.h3DensityMetrics) return;
+    byH3.set(facility.h3DensityMetrics.h3Index7, facility.h3DensityMetrics);
+  });
+
+  const metrics = Array.from(byH3.values());
+  if (!metrics.length) return undefined;
+  if (metrics.length === 1) return metrics[0];
+
+  return {
+    h3Index7: `${metrics.length} H3 cells`,
+    uniqueHospitalCount: Math.round(avg(metrics.map((metric) => metric.uniqueHospitalCount))),
+    populationDensityPerKm2: avg(metrics.map((metric) => metric.populationDensityPerKm2)),
+    hospitalToPopulationDensityRatio: avg(metrics.map((metric) => metric.hospitalToPopulationDensityRatio)),
+    normalizedHospPopRatio: avg(metrics.map((metric) => metric.normalizedHospPopRatio)),
+  };
+}
+
+function h3DensityPressure(metrics: H3DensityMetrics): number {
+  const ratioPressure = 1 - Math.min(1, metrics.hospitalToPopulationDensityRatio / 0.0012);
+  const densityPressure = Math.min(1, metrics.populationDensityPerKm2 / 20000);
+  const hospitalPressure = 1 - Math.min(1, metrics.uniqueHospitalCount / 12);
+  return clamp01(ratioPressure * 0.5 + densityPressure * 0.3 + hospitalPressure * 0.2);
 }
 
 function avg(values: number[]): number {
@@ -84,4 +115,8 @@ function avg(values: number[]): number {
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(100, value));
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }

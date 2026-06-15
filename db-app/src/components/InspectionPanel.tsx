@@ -1,4 +1,4 @@
-import { Activity, Building2, DatabaseZap, UsersRound } from "lucide-react";
+import { Activity, Building2, DatabaseZap, Gauge, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Capability, RegionAggregate } from "../types";
 import { statusClass } from "./RiskMatrix";
@@ -36,7 +36,22 @@ export function InspectionPanel({ region, capability }: InspectionPanelProps) {
         <Metric icon={<Activity size={16} />} label={`${capability} beds`} value={String(region.capableBeds)} />
         <Metric icon={<Building2 size={16} />} label="Facilities" value={`${region.capableFacilityCount}/${region.facilityCount}`} />
         <Metric icon={<DatabaseZap size={16} />} label="Trust / Risk" value={`${region.trustScore} / ${region.riskScore}`} />
+        {region.h3DensityMetrics && (
+          <>
+            <Metric icon={<Gauge size={16} />} label="H3 population density" value={`${Math.round(region.h3DensityMetrics.populationDensityPerKm2).toLocaleString("en-IN")}/km2`} />
+            <Metric icon={<Building2 size={16} />} label="H3 hospital count" value={String(region.h3DensityMetrics.uniqueHospitalCount)} />
+          </>
+        )}
       </div>
+      {region.h3DensityMetrics && (
+        <div className="density-evidence">
+          <strong>H3 density evidence</strong>
+          <span>{region.h3DensityMetrics.h3Index7}</span>
+          <small>
+            Hospital-to-density ratio {formatRatio(region.h3DensityMetrics.hospitalToPopulationDensityRatio)} · normalized {region.h3DensityMetrics.normalizedHospPopRatio.toFixed(3)}
+          </small>
+        </div>
+      )}
       <div className="facility-table">
         <div className="table-head">
           <span>Facility</span>
@@ -72,4 +87,10 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatRatio(value: number): string {
+  if (!Number.isFinite(value)) return "unavailable";
+  if (value === 0) return "0";
+  return value < 0.01 ? value.toExponential(2) : value.toFixed(3);
 }
