@@ -25,19 +25,19 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
       <div className="panel-header compact">
         <div>
           <p className="eyebrow">Largest deserts</p>
-          <h2>{visibleClusters.length ? "Largest light H3 clusters" : "No light H3 clusters"}</h2>
+          <h2>{visibleClusters.length ? "Largest desert clusters" : "No desert clusters in scope"}</h2>
         </div>
-        <span className="source-badge">Light H3</span>
+        <span className="source-badge">Estimated people</span>
       </div>
 
       <div className="desert-summary-strip">
         <span>
           <strong>{formatPopulation(h3Clusters.length)}</strong>
-          H3 clusters
+          desert clusters
         </span>
         <span>
           <strong>{formatPopulation(totalPopulation)}</strong>
-          population
+          estimated people
         </span>
       </div>
 
@@ -59,7 +59,10 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
                 </small>
                 <i style={{ width: `${Math.max(8, (cluster.population / maxPopulation) * 100)}%` }} />
               </span>
-              <span className="desert-rank-value">{formatPopulation(cluster.population)}</span>
+              <span className="desert-rank-value">
+                <strong>{formatPopulation(cluster.population)}</strong>
+                <small>est. people</small>
+              </span>
             </button>
           ))}
           {othersPopulation > 0 && (
@@ -68,17 +71,20 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
               <span className="desert-rank-main">
                 <strong>Others</strong>
                 <small>
-                  <Users size={13} /> {h3Clusters.length - MAX_VISIBLE_DESERTS} additional H3 clusters
+                  <Users size={13} /> {h3Clusters.length - MAX_VISIBLE_DESERTS} additional desert clusters
                 </small>
                 <i style={{ width: `${Math.max(8, (othersPopulation / maxPopulation) * 100)}%` }} />
               </span>
-              <span className="desert-rank-value">{formatPopulation(othersPopulation)}</span>
+              <span className="desert-rank-value">
+                <strong>{formatPopulation(othersPopulation)}</strong>
+                <small>est. people</small>
+              </span>
             </div>
           )}
         </div>
       ) : (
         <div className="empty-state compact-empty">
-          <h2>No light-yellow sparse H3 clusters match the current filters.</h2>
+          <h2>No large sparse desert clusters match the current filters.</h2>
           <p>Adjust specialty or geography to expand the scope.</p>
         </div>
       )}
@@ -143,7 +149,7 @@ function h3ClusterId(region: RegionAggregate): string {
 }
 
 function clusterLabel(id: string, region: RegionAggregate): string {
-  return `${region.villageTown} H3`;
+  return region.villageTown;
 }
 
 function formatPopulation(value: number): string {
