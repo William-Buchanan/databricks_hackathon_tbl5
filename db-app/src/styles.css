@@ -203,7 +203,6 @@ main {
   background: rgba(255, 255, 255, 0.72);
 }
 
-.source-note,
 .matrix-header-tools small {
   max-width: min(100%, 760px);
   color: var(--color-gravel);
@@ -329,6 +328,7 @@ main {
 .filter-drawer,
 .matrix-panel,
 .region-panel,
+.largest-deserts-panel,
 .inspection-panel,
 .scenario-sidebar,
 .map-panel {
@@ -585,6 +585,19 @@ main {
   border-color: transparent;
   background: linear-gradient(135deg, #0b2026, #2563eb);
   color: var(--color-eggshell);
+}
+
+.visible-map-tabs {
+  position: sticky;
+  top: 84px;
+  z-index: 9;
+  margin-bottom: 0;
+  padding: 4px;
+  border: 1px solid rgba(231, 223, 209, 0.82);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-subtle-2);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .status-legend {
@@ -1115,6 +1128,7 @@ main {
 }
 
 .support-tabs .region-panel,
+.support-tabs .largest-deserts-panel,
 .support-tabs .inspection-panel,
 .support-tabs .matrix-panel,
 .support-tabs .scenario-sidebar {
@@ -1206,6 +1220,125 @@ main {
   color: var(--color-gravel);
   font-size: 12px;
   background: rgba(255, 255, 255, 0.66);
+}
+
+.largest-deserts-panel {
+  display: grid;
+  gap: 14px;
+  padding: 0 0 16px;
+}
+
+.globe-console > .largest-deserts-panel {
+  position: sticky;
+  top: 84px;
+}
+
+.desert-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.desert-summary-strip span {
+  display: grid;
+  gap: 1px;
+  min-height: 64px;
+  align-content: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(231, 223, 209, 0.84);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--color-gravel);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.desert-summary-strip strong {
+  color: var(--color-obsidian);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.desert-ranking {
+  display: grid;
+  gap: 10px;
+  max-height: 540px;
+  overflow: auto;
+  padding: 0 16px;
+}
+
+.desert-rank-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 74px;
+  border: 1px solid rgba(231, 223, 209, 0.84);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-obsidian);
+  text-align: left;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.desert-rank-row:hover,
+.desert-rank-row.selected {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.34);
+  background: linear-gradient(145deg, rgba(239, 246, 255, 0.86), rgba(255, 255, 255, 0.78));
+  box-shadow: rgba(37, 99, 235, 0.1) 0 12px 28px;
+}
+
+.desert-rank-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.desert-rank-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desert-rank-main small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--color-gravel);
+}
+
+.desert-rank-main i {
+  display: block;
+  height: 7px;
+  max-width: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--color-mint), #78d7a2);
+}
+
+.desert-rank-value {
+  align-self: start;
+  color: var(--color-cinder);
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+.desert-others {
+  pointer-events: none;
+}
+
+.desert-others .desert-rank-main i {
+  background: #b8c0bd;
+}
+
+.compact-empty {
+  margin: 0 16px;
 }
 
 .status-dot {
