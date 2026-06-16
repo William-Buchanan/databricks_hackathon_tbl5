@@ -1,3 +1,4 @@
+import { cellToParent, isValidCell, latLngToCell } from "h3-js";
 import { MapPin, Users } from "lucide-react";
 import type { RegionAggregate } from "../types";
 import { statusClass } from "./RiskMatrix";
@@ -10,57 +11,55 @@ interface LargestDesertsPanelProps {
 }
 
 const MAX_VISIBLE_DESERTS = 5;
+const H3_CLUSTER_RESOLUTION = 4;
 
 export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: LargestDesertsPanelProps) {
-  const verifiedDeserts = regions.filter((region) => region.status === "Verified Care Desert");
-  const desertRegions = (verifiedDeserts.length ? verifiedDeserts : regions.filter((region) => region.riskScore >= 62))
-    .slice()
-    .sort((a, b) => b.population - a.population || b.riskScore - a.riskScore);
-  const visibleDeserts = desertRegions.slice(0, MAX_VISIBLE_DESERTS);
-  const othersPopulation = desertRegions.slice(MAX_VISIBLE_DESERTS).reduce((sum, region) => sum + region.population, 0);
-  const maxPopulation = Math.max(1, ...visibleDeserts.map((region) => region.population), othersPopulation);
-  const totalPopulation = desertRegions.reduce((sum, region) => sum + region.population, 0);
+  const h3Clusters = lightH3DesertClusters(regions);
+  const visibleClusters = h3Clusters.slice(0, MAX_VISIBLE_DESERTS);
+  const othersPopulation = h3Clusters.slice(MAX_VISIBLE_DESERTS).reduce((sum, cluster) => sum + cluster.population, 0);
+  const maxPopulation = Math.max(1, ...visibleClusters.map((cluster) => cluster.population), othersPopulation);
+  const totalPopulation = h3Clusters.reduce((sum, cluster) => sum + cluster.population, 0);
 
   return (
     <section className="largest-deserts-panel" aria-label="Largest medical deserts">
       <div className="panel-header compact">
         <div>
           <p className="eyebrow">Largest deserts</p>
-          <h2>{visibleDeserts.length ? "Largest care desert clusters" : "No deserts in scope"}</h2>
+          <h2>{visibleClusters.length ? "Largest light H3 clusters" : "No light H3 clusters"}</h2>
         </div>
-        <span className="source-badge">{verifiedDeserts.length ? "Verified" : "Risk threshold"}</span>
+        <span className="source-badge">Light H3</span>
       </div>
 
       <div className="desert-summary-strip">
         <span>
-          <strong>{desertRegions.length.toLocaleString("en-IN")}</strong>
-          clusters
+          <strong>{formatPopulation(h3Clusters.length)}</strong>
+          H3 clusters
         </span>
         <span>
-          <strong>{totalPopulation.toLocaleString("en-IN")}</strong>
+          <strong>{formatPopulation(totalPopulation)}</strong>
           population
         </span>
       </div>
 
-      {visibleDeserts.length ? (
+      {visibleClusters.length ? (
         <div className="desert-ranking">
-          {visibleDeserts.map((region) => (
+          {visibleClusters.map((cluster) => (
             <button
-              key={region.id}
+              key={cluster.id}
               type="button"
-              className={`desert-rank-row ${selectedId === region.id ? "selected" : ""}`}
-              onClick={() => onSelect(region)}
-              onMouseEnter={() => onHover(region)}
+              className={`desert-rank-row ${selectedId && cluster.regions.some((region) => region.id === selectedId) ? "selected" : ""}`}
+              onClick={() => onSelect(cluster.topRegion)}
+              onMouseEnter={() => onHover(cluster.topRegion)}
             >
-              <span className={`status-dot ${statusClass(region.status)}`} />
+              <span className={`status-dot ${statusClass(cluster.topRegion.status)}`} />
               <span className="desert-rank-main">
-                <strong>{region.villageTown}</strong>
+                <strong>{cluster.label}</strong>
                 <small>
-                  <MapPin size={13} /> {region.district}, {region.state}
+                  <MapPin size={13} /> {cluster.districts.join(", ")}
                 </small>
-                <i style={{ width: `${Math.max(8, (region.population / maxPopulation) * 100)}%` }} />
+                <i style={{ width: `${Math.max(8, (cluster.population / maxPopulation) * 100)}%` }} />
               </span>
-              <span className="desert-rank-value">{region.population.toLocaleString("en-IN")}</span>
+              <span className="desert-rank-value">{formatPopulation(cluster.population)}</span>
             </button>
           ))}
           {othersPopulation > 0 && (
@@ -69,20 +68,84 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
               <span className="desert-rank-main">
                 <strong>Others</strong>
                 <small>
-                  <Users size={13} /> {desertRegions.length - MAX_VISIBLE_DESERTS} additional clusters
+                  <Users size={13} /> {h3Clusters.length - MAX_VISIBLE_DESERTS} additional H3 clusters
                 </small>
                 <i style={{ width: `${Math.max(8, (othersPopulation / maxPopulation) * 100)}%` }} />
               </span>
-              <span className="desert-rank-value">{othersPopulation.toLocaleString("en-IN")}</span>
+              <span className="desert-rank-value">{formatPopulation(othersPopulation)}</span>
             </div>
           )}
         </div>
       ) : (
         <div className="empty-state compact-empty">
-          <h2>No verified medical deserts match the current filters.</h2>
+          <h2>No light-yellow sparse H3 clusters match the current filters.</h2>
           <p>Adjust specialty or geography to expand the scope.</p>
         </div>
       )}
     </section>
   );
+}
+
+interface H3DesertCluster {
+  id: string;
+  label: string;
+  regions: RegionAggregate[];
+  topRegion: RegionAggregate;
+  districts: string[];
+  population: number;
+  averageRisk: number;
+  capableFacilityCount: number;
+  facilityCount: number;
+}
+
+function lightH3DesertClusters(regions: RegionAggregate[]): H3DesertCluster[] {
+  const groups = new Map<string, RegionAggregate[]>();
+
+  regions.forEach((region) => {
+    const id = h3ClusterId(region);
+    const current = groups.get(id) ?? [];
+    current.push(region);
+    groups.set(id, current);
+  });
+
+  return Array.from(groups.entries())
+    .map(([id, clusterRegions]) => {
+      const population = clusterRegions.reduce((sum, region) => sum + region.population, 0);
+      const capableFacilityCount = clusterRegions.reduce((sum, region) => sum + region.capableFacilityCount, 0);
+      const facilityCount = clusterRegions.reduce((sum, region) => sum + region.facilityCount, 0);
+      const averageRisk = Math.round(clusterRegions.reduce((sum, region) => sum + region.riskScore, 0) / clusterRegions.length);
+      const topRegion = [...clusterRegions].sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore)[0];
+      const districts = Array.from(new Set(clusterRegions.map((region) => region.district))).sort((a, b) => a.localeCompare(b)).slice(0, 3);
+      return {
+        id,
+        label: clusterLabel(id, topRegion),
+        regions: clusterRegions,
+        topRegion,
+        districts,
+        population,
+        averageRisk,
+        capableFacilityCount,
+        facilityCount,
+      };
+    })
+    .filter((cluster) => {
+      const capableCoverage = cluster.capableFacilityCount / Math.max(1, cluster.population / 100000);
+      const hospitalCoverage = cluster.facilityCount / Math.max(1, cluster.population / 100000);
+      return cluster.averageRisk < 64 && capableCoverage < 1.25 && hospitalCoverage < 4;
+    })
+    .slice()
+    .sort((a, b) => b.population - a.population || a.facilityCount - b.facilityCount || b.averageRisk - a.averageRisk);
+}
+
+function h3ClusterId(region: RegionAggregate): string {
+  const rawH3 = region.facilities.find((facility) => facility.h3Index7 && isValidCell(facility.h3Index7))?.h3Index7;
+  return rawH3 ? cellToParent(rawH3, H3_CLUSTER_RESOLUTION) : latLngToCell(region.latitude, region.longitude, H3_CLUSTER_RESOLUTION);
+}
+
+function clusterLabel(id: string, region: RegionAggregate): string {
+  return `${region.villageTown} H3`;
+}
+
+function formatPopulation(value: number): string {
+  return value.toLocaleString("en-US");
 }
