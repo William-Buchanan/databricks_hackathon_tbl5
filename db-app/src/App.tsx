@@ -18,14 +18,35 @@ import { generateHealthcareDataset } from "./data/mockHealthcare";
 import { budgetInfoForProfile, getDefaultProfile, getProfile } from "./data/specialtyPlanning";
 import { logPlannerEvent } from "./lib/auditLog";
 import { ALL_VALUE, aggregateRegions, applyFilters, uniqueSorted } from "./lib/scoring";
-import type { FacilityRecord, Filters, PlanningScenario, RegionAggregate, RouteSummary } from "./types";
+import type { FacilityRecord, Filters, PlanningScenario, RegionAggregate, RouteSummary, SpecialtyPlanningProfile } from "./types";
 
 const defaultProfile = getDefaultProfile();
+const allCategoryProfile: SpecialtyPlanningProfile = {
+  ...defaultProfile,
+  category: "All categories",
+  subcategory: "All specialties",
+  specialty: "All specialties",
+  lifeCriticality: 5,
+  costTier: 3,
+  expectedLift: 5,
+  rationale: "Aggregates access gaps across every mapped specialty category and recorded facility capability.",
+  gbdEvidence: {
+    ...defaultProfile.gbdEvidence,
+    plannerCategory: "All categories",
+    plannerSubcategory: "All specialties",
+    plannerSpecialty: "All specialties",
+    primaryCause: "All mapped life-threatening causes",
+    causeGroup: "Multiple GBD cause groups",
+    preferredMeasure: "GBD burden measures",
+    secondaryMeasure: "Mortality and YLL measures",
+    notes: "Aggregated category view; choose a specific category for specialty-specific GBD evidence.",
+  },
+};
 const initialFilters: Filters = {
   capability: defaultProfile.capability,
-  specialtyCategory: defaultProfile.category,
-  specialtySubcategory: defaultProfile.subcategory,
-  specialty: defaultProfile.specialty,
+  specialtyCategory: ALL_VALUE,
+  specialtySubcategory: ALL_VALUE,
+  specialty: ALL_VALUE,
   budgetBand: budgetInfoForProfile(defaultProfile).band,
   budgetCrore: budgetInfoForProfile(defaultProfile).crore,
   keyword: "",
@@ -84,9 +105,11 @@ export default function App() {
     };
   }, []);
 
+  const allCategoriesSelected = filters.specialtyCategory === ALL_VALUE;
   const scopedRecords = useMemo(() => applyKeyword(applyFilters(dataset, filters), filters.keyword), [dataset, filters]);
-  const regions = useMemo(() => aggregateRegions(scopedRecords, filters.capability), [scopedRecords, filters.capability]);
+  const regions = useMemo(() => aggregateRegions(scopedRecords, allCategoriesSelected ? undefined : filters.capability), [allCategoriesSelected, scopedRecords, filters.capability]);
   const planningProfile = useMemo(() => {
+    if (filters.specialtyCategory === ALL_VALUE) return allCategoryProfile;
     const baseProfile = getProfile(filters.specialtyCategory, filters.specialtySubcategory, filters.specialty);
     const benchmark = hbpBenchmarkForProfile(baseProfile.category, baseProfile.specialty);
     return {

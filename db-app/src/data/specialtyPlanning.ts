@@ -95,6 +95,8 @@ export const cleanedCategoryCounts: Record<string, number> = {
   "Vascular & Endovascular": 5,
 };
 
+export const allCategoryCount = Object.values(cleanedCategoryCounts).reduce((sum, count) => sum + count, 0);
+
 export function profilesForCategory(category: string): SpecialtyPlanningProfile[] {
   return specialtyProfiles.filter((profile) => profile.category === category);
 }

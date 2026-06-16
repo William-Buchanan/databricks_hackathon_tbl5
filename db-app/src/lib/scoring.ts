@@ -41,7 +41,7 @@ function classify(riskScore: number, trustScore: number): ZoneStatus {
   return "Low Priority Audit";
 }
 
-export function aggregateRegions(records: FacilityRecord[], capability: Capability): RegionAggregate[] {
+export function aggregateRegions(records: FacilityRecord[], capability?: Capability): RegionAggregate[] {
   const groups = new Map<string, FacilityRecord[]>();
   records.forEach((record) => {
     const key = `${record.state}|${record.district}|${record.subDistrict}|${record.pinCode}|${record.villageTown}`;
@@ -52,8 +52,8 @@ export function aggregateRegions(records: FacilityRecord[], capability: Capabili
     .map(([key, facilities]) => {
       const [state, district, subDistrict, pinCode, villageTown] = key.split("|");
       const population = facilities.reduce((sum, f) => sum + f.localPopulation, 0);
-      const capableFacilities = facilities.filter((f) => f.capabilities.includes(capability));
-      const capableBeds = capableFacilities.reduce((sum, f) => sum + (f.specializedBeds[capability] ?? 0), 0);
+      const capableFacilities = capability ? facilities.filter((f) => f.capabilities.includes(capability)) : facilities.filter((f) => f.capabilities.length > 0);
+      const capableBeds = capability ? capableFacilities.reduce((sum, f) => sum + (f.specializedBeds[capability] ?? 0), 0) : capableFacilities.reduce((sum, f) => sum + totalSpecializedBeds(f), 0);
       const trustScore = Math.round(facilities.reduce((sum, f) => sum + trustFor(f), 0) / facilities.length);
       const nearestTertiaryMinutes = Math.min(...facilities.map((f) => f.distanceToTertiaryMinutes));
       const h3DensityMetrics = aggregateH3DensityMetrics(facilities);
@@ -80,6 +80,10 @@ export function aggregateRegions(records: FacilityRecord[], capability: Capabili
       };
     })
     .sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore);
+}
+
+function totalSpecializedBeds(record: FacilityRecord): number {
+  return Object.values(record.specializedBeds).reduce((sum, beds) => sum + (beds ?? 0), 0);
 }
 
 function aggregateH3DensityMetrics(facilities: FacilityRecord[]): H3DensityMetrics | undefined {

@@ -10,7 +10,7 @@ interface LargestDesertsPanelProps {
   onHover: (region: RegionAggregate) => void;
 }
 
-const MAX_VISIBLE_DESERTS = 5;
+const MAX_VISIBLE_DESERTS = 15;
 const H3_CLUSTER_RESOLUTION = 4;
 
 export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: LargestDesertsPanelProps) {

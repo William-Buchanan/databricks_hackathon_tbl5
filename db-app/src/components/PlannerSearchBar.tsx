@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { categoryNames, cleanedCategoryCounts, specialtiesForCategory } from "../data/specialtyPlanning";
+import { allCategoryCount, categoryNames, cleanedCategoryCounts, specialtiesForCategory } from "../data/specialtyPlanning";
 import { ALL_VALUE } from "../lib/scoring";
 import type { Filters } from "../types";
 
@@ -11,6 +11,16 @@ interface PlannerSearchBarProps {
 
 export function PlannerSearchBar({ filters, states, onChange }: PlannerSearchBarProps) {
   function setCategory(category: string) {
+    if (category === ALL_VALUE) {
+      onChange({
+        ...filters,
+        specialtyCategory: ALL_VALUE,
+        specialtySubcategory: ALL_VALUE,
+        specialty: ALL_VALUE,
+      });
+      return;
+    }
+
     const specialty = specialtiesForCategory(category)[0];
     onChange({
       ...filters,
@@ -36,6 +46,7 @@ export function PlannerSearchBar({ filters, states, onChange }: PlannerSearchBar
       <label>
         <span>Specialties</span>
         <select value={filters.specialtyCategory} onChange={(event) => setCategory(event.target.value)}>
+          <option value={ALL_VALUE}>All categories ({allCategoryCount})</option>
           {categoryNames.map((category) => (
             <option key={category} value={category}>
               {category} ({cleanedCategoryCounts[category] ?? 1})
