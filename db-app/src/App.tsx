@@ -4,6 +4,7 @@ import { AskAiPanel } from "./components/AskAiPanel";
 import { ExploreCards } from "./components/ExploreCards";
 import { HbpRateModal } from "./components/HbpRateModal";
 import { InspectionPanel } from "./components/InspectionPanel";
+import { LargestDesertsPanel } from "./components/LargestDesertsPanel";
 import { PlannerSearchBar } from "./components/PlannerSearchBar";
 import { PlannerMap } from "./components/PlannerMap";
 import { RegionFilters } from "./components/RegionFilters";
@@ -35,7 +36,7 @@ const initialFilters: Filters = {
   pinCode: ALL_VALUE,
 };
 
-type PlannerTab = "zones" | "matrix" | "details" | "scenarios";
+type PlannerTab = "zones" | "deserts" | "matrix" | "details" | "scenarios";
 type PlannerMode = "explore" | "globe";
 
 export default function App() {
@@ -310,9 +311,6 @@ export default function App() {
       <header className="app-header">
         <h1>Find the highest-risk care gaps.</h1>
         <span className="source-badge">Data: {datasetSource}</span>
-        <small className="source-note">
-          Using UC gold tables: workspace.gold.facilities_with_confidence_score and workspace.gold.hospitals_per_h3_and_density_ratio
-        </small>
       </header>
 
       <section className="planner-layout full-width">
@@ -353,12 +351,14 @@ export default function App() {
           <section className="support-tabs" aria-label="Planner detail tabs">
             <div className="tab-switcher">
               <button type="button" className={activeTab === "zones" ? "active" : ""} onClick={() => setActiveTab("zones")}>Zones</button>
+              <button type="button" className={activeTab === "deserts" ? "active" : ""} onClick={() => setActiveTab("deserts")}>Deserts</button>
               <button type="button" className={activeTab === "matrix" ? "active" : ""} onClick={() => setActiveTab("matrix")}>Matrix</button>
               <button type="button" className={activeTab === "details" ? "active" : ""} onClick={() => setActiveTab("details")}>Facilities</button>
               <button type="button" className={activeTab === "scenarios" ? "active" : ""} onClick={() => setActiveTab("scenarios")}>Scenarios</button>
             </div>
             <StatusLegend />
             {activeTab === "zones" && <RegionList regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} flaggedIds={flaggedIds} onToggleFlag={toggleFlag} />}
+            {activeTab === "deserts" && <LargestDesertsPanel regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />}
             {activeTab === "matrix" && <RiskMatrix regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />}
             {activeTab === "details" && <InspectionPanel region={selectedRegion} capability={filters.capability} />}
             {activeTab === "scenarios" && (
