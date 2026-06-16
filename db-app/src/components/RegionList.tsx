@@ -1,6 +1,6 @@
 import { MapPin, Navigation } from "lucide-react";
 import type { RegionAggregate } from "../types";
-import { statusClass } from "./RiskMatrix";
+import { statusClass } from "./statusStyles";
 
 interface RegionListProps {
   regions: RegionAggregate[];

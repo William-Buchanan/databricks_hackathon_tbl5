@@ -1,7 +1,7 @@
 import { cellToParent, isValidCell, latLngToCell } from "h3-js";
 import { MapPin, Users } from "lucide-react";
 import type { RegionAggregate } from "../types";
-import { statusClass } from "./RiskMatrix";
+import { statusClass } from "./statusStyles";
 
 interface LargestDesertsPanelProps {
   regions: RegionAggregate[];

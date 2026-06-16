@@ -4,7 +4,7 @@ import { AlertTriangle, Route } from "lucide-react";
 import { logPlannerEvent } from "../lib/auditLog";
 import type { FacilityRecord, RegionAggregate, RouteSummary } from "../types";
 import { loadGoogleMaps } from "../lib/mapLoader";
-import { statusClass } from "./RiskMatrix";
+import { statusClass } from "./statusStyles";
 
 interface PlannerMapProps {
   regions: RegionAggregate[];
@@ -55,10 +55,10 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
   const originRef = useRef<{ latitude: number; longitude: number } | undefined>(undefined);
   const selectedRef = useRef<RegionAggregate | undefined>(selected);
   const showRoutingRef = useRef(showRouting);
-  const layerModeRef = useRef<MapLayerMode>("points");
+  const layerModeRef = useRef<MapLayerMode>("h3");
   const lastCenteredRegionId = useRef<string | undefined>(undefined);
   const [mapError, setMapError] = useState<string | null>(apiKey ? null : "Google Maps key missing. Showing mock spatial geometry.");
-  const [layerMode, setLayerMode] = useState<MapLayerMode>("points");
+  const [layerMode, setLayerMode] = useState<MapLayerMode>("h3");
   const [mapReady, setMapReady] = useState(false);
   const [mapZoom, setMapZoom] = useState(5);
 
