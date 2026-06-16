@@ -1,0 +1,35 @@
+bundle:
+  name: medical-desert-planner
+
+resources:
+  apps:
+    medical_desert_planner:
+      name: medical-desert-planner
+      source_code_path: .
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: d117c0ca6fa3e29c
+            permission: CAN_USE
+        - name: facilities-source-table
+          table:
+            name: workspace.gold.facilities_with_confidence_score
+            permission: SELECT
+        - name: h3-density-source-table
+          table:
+            name: workspace.gold.hospitals_per_h3_and_density_ratio
+            permission: SELECT
+      config:
+        command:
+          - npm
+          - run
+          - start
+        env:
+          - name: DATABRICKS_WAREHOUSE_ID
+            valueFrom: sql-warehouse
+          - name: APP_LOG_TABLE
+            value: workspace.default.user_logs
+
+targets:
+  dev:
+    default: true

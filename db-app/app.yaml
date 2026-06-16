@@ -1,0 +1,9 @@
+command:
+  - npm
+  - run
+  - start
+env:
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: d117c0ca6fa3e29c
+  - name: APP_LOG_TABLE
+    value: workspace.default.user_logs
