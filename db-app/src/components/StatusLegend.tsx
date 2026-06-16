@@ -1,4 +1,4 @@
-import { STATUS_LEGEND_ITEMS, statusClass } from "./RiskMatrix";
+import { STATUS_LEGEND_ITEMS, statusClass } from "./statusStyles";
 
 export function StatusLegend() {
   return (

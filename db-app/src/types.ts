@@ -9,7 +9,7 @@ export type BudgetBand = "Low" | "Medium" | "High";
 
 export type OperationalStatus = "Operational" | "Limited" | "Closed" | "Unknown";
 
-export type MatrixStatus =
+export type ZoneStatus =
   | "Verified Care Desert"
   | "Data-Poor Region"
   | "Monitored Access"
@@ -80,7 +80,7 @@ export interface RegionAggregate {
   capableBeds: number;
   trustScore: number;
   riskScore: number;
-  status: MatrixStatus;
+  status: ZoneStatus;
   nearestTertiaryMinutes: number;
   h3DensityMetrics?: H3DensityMetrics;
   facilities: FacilityRecord[];

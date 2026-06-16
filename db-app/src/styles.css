@@ -89,12 +89,18 @@ main {
   letter-spacing: 0;
 }
 
-.voice-wheel {
+.brand-icon {
   width: 34px;
   height: 34px;
-  border-radius: 9999px;
-  background: var(--gradient-voice-spectrum);
-  box-shadow: rgba(11, 32, 38, 0.16) 0 8px 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  border: 1px solid rgba(231, 223, 209, 0.9);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(244, 240, 232, 0.84));
+  color: var(--color-cinder);
+  box-shadow: rgba(11, 32, 38, 0.1) 0 8px 20px, rgba(255, 255, 255, 0.85) 0 1px 0 inset;
 }
 
 .topbar-actions {
@@ -201,14 +207,6 @@ main {
   border-radius: 9999px;
   padding: 5px 11px;
   background: rgba(255, 255, 255, 0.72);
-}
-
-.matrix-header-tools small {
-  max-width: min(100%, 760px);
-  color: var(--color-gravel);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
 }
 
 .app-header {
@@ -326,7 +324,6 @@ main {
 }
 
 .filter-drawer,
-.matrix-panel,
 .region-panel,
 .largest-deserts-panel,
 .inspection-panel,
@@ -587,17 +584,40 @@ main {
   color: var(--color-eggshell);
 }
 
-.visible-map-tabs {
+.planner-side-panel {
   position: sticky;
   top: 84px;
-  z-index: 9;
-  margin-bottom: 0;
+  display: grid;
+  gap: 12px;
+  align-self: start;
+}
+
+.side-view-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 4px;
   padding: 4px;
   border: 1px solid rgba(231, 223, 209, 0.82);
-  border-radius: 24px;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: var(--shadow-subtle-2);
   backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.side-view-switcher button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--color-cinder);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.side-view-switcher button.active {
+  background: var(--color-obsidian);
+  color: var(--color-eggshell);
+  box-shadow: rgba(11, 32, 38, 0.16) 0 8px 18px;
 }
 
 .status-legend {
@@ -702,8 +722,6 @@ main {
 }
 
 .context-card {
-  position: sticky;
-  top: 84px;
   align-self: start;
   display: grid;
   gap: 16px;
@@ -1130,7 +1148,6 @@ main {
 .support-tabs .region-panel,
 .support-tabs .largest-deserts-panel,
 .support-tabs .inspection-panel,
-.support-tabs .matrix-panel,
 .support-tabs .scenario-sidebar {
   box-shadow: var(--shadow-subtle-7);
 }
@@ -1228,11 +1245,6 @@ main {
   padding: 0 0 16px;
 }
 
-.globe-console > .largest-deserts-panel {
-  position: sticky;
-  top: 84px;
-}
-
 .desert-summary-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1322,11 +1334,25 @@ main {
 }
 
 .desert-rank-value {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
   align-self: start;
   color: var(--color-cinder);
+  text-align: right;
+}
+
+.desert-rank-value strong {
   font-size: 18px;
   font-weight: 850;
+  line-height: 1.05;
   letter-spacing: -0.02em;
+}
+
+.desert-rank-value small {
+  color: var(--color-gravel);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .desert-others {
@@ -1348,168 +1374,6 @@ main {
   border-radius: 9999px;
   display: inline-block;
   box-shadow: rgba(11, 32, 38, 0.2) 0 4px 12px;
-}
-
-.matrix-panel {
-  padding-bottom: 16px;
-}
-
-.matrix-header-tools {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-  align-items: center;
-}
-
-.matrix-legend {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 7px;
-  max-width: 760px;
-}
-
-.matrix-legend span {
-  min-height: 30px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  border: 1px solid rgba(231, 223, 209, 0.86);
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--color-cinder);
-  font-size: 12px;
-  font-weight: 800;
-  box-shadow: var(--shadow-subtle-2);
-}
-
-.matrix-legend i {
-  width: 10px;
-  height: 10px;
-  border-radius: 9999px;
-  box-shadow: rgba(11, 32, 38, 0.18) 0 3px 8px;
-}
-
-.matrix {
-  position: relative;
-  height: 430px;
-  margin: 0 16px;
-  border: 1px solid rgba(231, 223, 209, 0.88);
-  border-radius: 22px;
-  overflow: hidden;
-  background:
-    linear-gradient(to right, transparent calc(50% - 1px), rgba(11, 32, 38, 0.18) calc(50% - 1px), rgba(11, 32, 38, 0.18) calc(50% + 1px), transparent calc(50% + 1px)),
-    linear-gradient(to top, transparent calc(50% - 1px), rgba(11, 32, 38, 0.18) calc(50% - 1px), rgba(11, 32, 38, 0.18) calc(50% + 1px), transparent calc(50% + 1px)),
-    linear-gradient(135deg, rgba(236, 253, 245, 0.72), rgba(255, 247, 237, 0.72) 52%, rgba(239, 246, 255, 0.78));
-}
-
-.axis {
-  position: absolute;
-  color: var(--color-gravel);
-  font-size: 12px;
-}
-
-.x-axis {
-  right: 14px;
-  bottom: 8px;
-}
-
-.y-axis {
-  left: 12px;
-  top: 8px;
-}
-
-.quadrant {
-  position: absolute;
-  width: 50%;
-  height: 50%;
-  padding: 20px;
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  pointer-events: none;
-}
-
-.quadrant::before {
-  content: "";
-  width: 34px;
-  height: 4px;
-  border-radius: 9999px;
-  margin-bottom: 4px;
-}
-
-.quadrant-verified {
-  background: rgba(239, 68, 68, 0.07);
-}
-
-.quadrant-verified::before {
-  background: #ef4444;
-}
-
-.quadrant-data-poor {
-  background: rgba(245, 158, 11, 0.09);
-}
-
-.quadrant-data-poor::before {
-  background: var(--color-amber);
-}
-
-.quadrant-monitored {
-  background: rgba(16, 185, 129, 0.08);
-}
-
-.quadrant-monitored::before {
-  background: var(--color-mint);
-}
-
-.quadrant-audit {
-  background: rgba(37, 99, 235, 0.07);
-}
-
-.quadrant-audit::before {
-  background: var(--color-signal-blue);
-}
-
-.quadrant span {
-  color: var(--color-gravel);
-  font-size: 12px;
-}
-
-.quadrant.right {
-  left: 50%;
-}
-
-.quadrant.left {
-  left: 0;
-}
-
-.quadrant.top {
-  top: 0;
-}
-
-.quadrant.bottom {
-  top: 50%;
-}
-
-.matrix-dot {
-  position: absolute;
-  z-index: 2;
-  width: 16px;
-  height: 16px;
-  transform: translate(-50%, 50%);
-  border-radius: 9999px;
-  border: 2px solid #ffffff;
-  padding: 0;
-  box-shadow: rgba(11, 32, 38, 0.2) 0 8px 20px;
-}
-
-.matrix-dot.selected {
-  width: 25px;
-  height: 25px;
-  outline: 3px solid rgba(11, 32, 38, 0.86);
-  outline-offset: 3px;
 }
 
 .status-desert {

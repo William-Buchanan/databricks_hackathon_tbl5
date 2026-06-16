@@ -1,7 +1,7 @@
 import { Activity, Building2, DatabaseZap, Gauge, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Capability, RegionAggregate } from "../types";
-import { statusClass } from "./RiskMatrix";
+import { statusClass } from "./statusStyles";
 
 interface InspectionPanelProps {
   region?: RegionAggregate;
@@ -14,7 +14,7 @@ export function InspectionPanel({ region, capability }: InspectionPanelProps) {
       <section className="inspection-panel empty-state">
         <p className="eyebrow">Detailed inspection</p>
         <h2>Select a high-risk aggregate zone.</h2>
-        <p>Hover or click a matrix point, map marker, or zone row to inspect facilities and population catchments.</p>
+        <p>Hover or click a map marker or zone row to inspect facilities and population catchments.</p>
       </section>
     );
   }

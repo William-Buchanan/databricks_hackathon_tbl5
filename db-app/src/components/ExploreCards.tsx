@@ -1,6 +1,6 @@
 import { Building2, Clock, ExternalLink, Facebook, HeartPulse, MapPin, ShieldCheck } from "lucide-react";
 import type { FacilityRecord, RegionAggregate, SpecialtyPlanningProfile } from "../types";
-import { statusClass } from "./RiskMatrix";
+import { statusClass } from "./statusStyles";
 
 interface ExploreCardsProps {
   facilities: FacilityRecord[];

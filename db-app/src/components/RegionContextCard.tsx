@@ -1,6 +1,6 @@
 import { formatInrRange, hbpBenchmarkForProfile, HBP_RATE_LIST_LABEL } from "../data/hbpRateList";
 import type { RegionAggregate, RouteSummary, SpecialtyPlanningProfile } from "../types";
-import { statusClass } from "./RiskMatrix";
+import { statusClass } from "./statusStyles";
 
 interface RegionContextCardProps {
   region?: RegionAggregate;
@@ -18,7 +18,7 @@ export function RegionContextCard({ region, routeSummary, planningProfile, isFla
     return (
       <aside className="context-card empty-context">
         <p className="eyebrow">Region details</p>
-        <h2>Hover a map point or matrix dot.</h2>
+        <h2>Hover a map point or zone row.</h2>
         <p>City, region, risk, trust, population, and travel burden will appear here.</p>
       </aside>
     );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Flag, Globe2, Grid2X2, X } from "lucide-react";
+import { Bot, Flag, Globe2, Grid2X2, Stethoscope, X } from "lucide-react";
 import { AskAiPanel } from "./components/AskAiPanel";
 import { ExploreCards } from "./components/ExploreCards";
 import { HbpRateModal } from "./components/HbpRateModal";
@@ -9,7 +9,6 @@ import { PlannerSearchBar } from "./components/PlannerSearchBar";
 import { PlannerMap } from "./components/PlannerMap";
 import { RegionFilters } from "./components/RegionFilters";
 import { RegionList } from "./components/RegionList";
-import { RiskMatrix } from "./components/RiskMatrix";
 import { RegionContextCard } from "./components/RegionContextCard";
 import { ScenarioSidebar } from "./components/ScenarioSidebar";
 import { SpecialtyPlanningControls } from "./components/SpecialtyPlanningControls";
@@ -36,7 +35,7 @@ const initialFilters: Filters = {
   pinCode: ALL_VALUE,
 };
 
-type PlannerTab = "zones" | "deserts" | "matrix" | "details" | "scenarios";
+type PlannerTab = "zones" | "deserts" | "details" | "scenarios";
 type PlannerMode = "explore" | "globe";
 
 export default function App() {
@@ -278,7 +277,9 @@ export default function App() {
     <main>
       <nav className="topbar">
         <div className="brand-mark">
-          <span className="voice-wheel" />
+          <span className="brand-icon" aria-hidden="true">
+            <Stethoscope size={20} strokeWidth={2.25} />
+          </span>
           <span>Medical Desert Planner</span>
         </div>
         <PlannerSearchBar filters={effectiveFilters} states={options.states} onChange={updateFilters} />
@@ -338,13 +339,6 @@ export default function App() {
               </aside>
 
               <div className="map-column">
-          <div className="tab-switcher visible-map-tabs" aria-label="Planner detail tabs">
-            <button type="button" className={activeTab === "zones" ? "active" : ""} onClick={() => setActiveTab("zones")}>Zones</button>
-            <button type="button" className={activeTab === "deserts" ? "active" : ""} onClick={() => setActiveTab("deserts")}>Deserts</button>
-            <button type="button" className={activeTab === "matrix" ? "active" : ""} onClick={() => setActiveTab("matrix")}>Matrix</button>
-            <button type="button" className={activeTab === "details" ? "active" : ""} onClick={() => setActiveTab("details")}>Facilities</button>
-            <button type="button" className={activeTab === "scenarios" ? "active" : ""} onClick={() => setActiveTab("scenarios")}>Scenarios</button>
-          </div>
           <PlannerMap
             regions={regions}
             selected={selectedRegion}
@@ -356,9 +350,13 @@ export default function App() {
             onRouteSummary={handleRouteSummary}
           />
           {activeTab !== "deserts" && <section className="support-tabs" aria-label="Planner detail tabs">
+            <div className="tab-switcher">
+              <button type="button" className={activeTab === "zones" ? "active" : ""} onClick={() => setActiveTab("zones")}>Zones</button>
+              <button type="button" className={activeTab === "details" ? "active" : ""} onClick={() => setActiveTab("details")}>Facilities</button>
+              <button type="button" className={activeTab === "scenarios" ? "active" : ""} onClick={() => setActiveTab("scenarios")}>Scenarios</button>
+            </div>
             <StatusLegend />
             {activeTab === "zones" && <RegionList regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} flaggedIds={flaggedIds} onToggleFlag={toggleFlag} />}
-            {activeTab === "matrix" && <RiskMatrix regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />}
             {activeTab === "details" && <InspectionPanel region={selectedRegion} capability={filters.capability} />}
             {activeTab === "scenarios" && (
               <ScenarioSidebar
@@ -375,29 +373,35 @@ export default function App() {
           </section>}
               </div>
 
-              {activeTab === "deserts" ? (
-          <LargestDesertsPanel regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />
-              ) : (
-          <RegionContextCard
-          region={contextRegion}
-          routeSummary={routeSummary}
-          planningProfile={planningProfile}
-          isFlagged={contextRegion ? flaggedIds.includes(contextRegion.id) : false}
-          onToggleFlag={toggleFlag}
-          onOpenHbpTable={() => {
-            setShowHbpTable(true);
-            logPlannerEvent({
-              eventType: "hbp_estimate_opened",
-              payload: {
-                region: contextRegion ? regionLogPayload(contextRegion) : undefined,
-                filters: effectiveFilters,
-                planningProfile: profileLogPayload(planningProfile),
-                hbpBenchmark: hbpBenchmarkForProfile(planningProfile.category, planningProfile.specialty),
-              },
-            });
-          }}
-              />
-              )}
+              <aside className="planner-side-panel">
+          <div className="side-view-switcher" aria-label="Planner view">
+            <button type="button" className={activeTab !== "deserts" ? "active" : ""} onClick={() => setActiveTab("zones")}>Zones</button>
+            <button type="button" className={activeTab === "deserts" ? "active" : ""} onClick={() => setActiveTab("deserts")}>Largest deserts</button>
+          </div>
+          {activeTab === "deserts" ? (
+            <LargestDesertsPanel regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />
+          ) : (
+            <RegionContextCard
+              region={contextRegion}
+              routeSummary={routeSummary}
+              planningProfile={planningProfile}
+              isFlagged={contextRegion ? flaggedIds.includes(contextRegion.id) : false}
+              onToggleFlag={toggleFlag}
+              onOpenHbpTable={() => {
+                setShowHbpTable(true);
+                logPlannerEvent({
+                  eventType: "hbp_estimate_opened",
+                  payload: {
+                    region: contextRegion ? regionLogPayload(contextRegion) : undefined,
+                    filters: effectiveFilters,
+                    planningProfile: profileLogPayload(planningProfile),
+                    hbpBenchmark: hbpBenchmarkForProfile(planningProfile.category, planningProfile.specialty),
+                  },
+                });
+              }}
+            />
+          )}
+              </aside>
             </section>
           )}
         </div>

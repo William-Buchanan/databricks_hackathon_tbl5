@@ -1,4 +1,4 @@
-import type { Capability, FacilityRecord, Filters, H3DensityMetrics, MatrixStatus, RegionAggregate } from "../types";
+import type { Capability, FacilityRecord, Filters, H3DensityMetrics, ZoneStatus, RegionAggregate } from "../types";
 
 export const ALL_VALUE = "All";
 
@@ -34,7 +34,7 @@ function riskFor(population: number, beds: number, capableFacilities: number, ne
   return clamp((demandPressure * 0.4 + scarcity * 0.24 + travel * 0.22 + h3Pressure * 0.14) * 100);
 }
 
-function classify(riskScore: number, trustScore: number): MatrixStatus {
+function classify(riskScore: number, trustScore: number): ZoneStatus {
   if (riskScore >= 62 && trustScore >= 62) return "Verified Care Desert";
   if (riskScore >= 62 && trustScore < 62) return "Data-Poor Region";
   if (riskScore < 62 && trustScore >= 62) return "Monitored Access";
