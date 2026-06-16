@@ -338,6 +338,13 @@ export default function App() {
               </aside>
 
               <div className="map-column">
+          <div className="tab-switcher visible-map-tabs" aria-label="Planner detail tabs">
+            <button type="button" className={activeTab === "zones" ? "active" : ""} onClick={() => setActiveTab("zones")}>Zones</button>
+            <button type="button" className={activeTab === "deserts" ? "active" : ""} onClick={() => setActiveTab("deserts")}>Deserts</button>
+            <button type="button" className={activeTab === "matrix" ? "active" : ""} onClick={() => setActiveTab("matrix")}>Matrix</button>
+            <button type="button" className={activeTab === "details" ? "active" : ""} onClick={() => setActiveTab("details")}>Facilities</button>
+            <button type="button" className={activeTab === "scenarios" ? "active" : ""} onClick={() => setActiveTab("scenarios")}>Scenarios</button>
+          </div>
           <PlannerMap
             regions={regions}
             selected={selectedRegion}
@@ -348,17 +355,9 @@ export default function App() {
             onToggleRouting={() => setShowRouting((value) => !value)}
             onRouteSummary={handleRouteSummary}
           />
-          <section className="support-tabs" aria-label="Planner detail tabs">
-            <div className="tab-switcher">
-              <button type="button" className={activeTab === "zones" ? "active" : ""} onClick={() => setActiveTab("zones")}>Zones</button>
-              <button type="button" className={activeTab === "deserts" ? "active" : ""} onClick={() => setActiveTab("deserts")}>Deserts</button>
-              <button type="button" className={activeTab === "matrix" ? "active" : ""} onClick={() => setActiveTab("matrix")}>Matrix</button>
-              <button type="button" className={activeTab === "details" ? "active" : ""} onClick={() => setActiveTab("details")}>Facilities</button>
-              <button type="button" className={activeTab === "scenarios" ? "active" : ""} onClick={() => setActiveTab("scenarios")}>Scenarios</button>
-            </div>
+          {activeTab !== "deserts" && <section className="support-tabs" aria-label="Planner detail tabs">
             <StatusLegend />
             {activeTab === "zones" && <RegionList regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} flaggedIds={flaggedIds} onToggleFlag={toggleFlag} />}
-            {activeTab === "deserts" && <LargestDesertsPanel regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />}
             {activeTab === "matrix" && <RiskMatrix regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />}
             {activeTab === "details" && <InspectionPanel region={selectedRegion} capability={filters.capability} />}
             {activeTab === "scenarios" && (
@@ -373,10 +372,13 @@ export default function App() {
                 onDelete={deleteScenario}
               />
             )}
-          </section>
+          </section>}
               </div>
 
-              <RegionContextCard
+              {activeTab === "deserts" ? (
+          <LargestDesertsPanel regions={regions} selectedId={selectedRegion?.id} onSelect={selectRegion} onHover={hoverRegion} />
+              ) : (
+          <RegionContextCard
           region={contextRegion}
           routeSummary={routeSummary}
           planningProfile={planningProfile}
@@ -395,6 +397,7 @@ export default function App() {
             });
           }}
               />
+              )}
             </section>
           )}
         </div>

@@ -587,6 +587,19 @@ main {
   color: var(--color-eggshell);
 }
 
+.visible-map-tabs {
+  position: sticky;
+  top: 84px;
+  z-index: 9;
+  margin-bottom: 0;
+  padding: 4px;
+  border: 1px solid rgba(231, 223, 209, 0.82);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-subtle-2);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
 .status-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1213,6 +1226,11 @@ main {
   display: grid;
   gap: 14px;
   padding: 0 0 16px;
+}
+
+.globe-console > .largest-deserts-panel {
+  position: sticky;
+  top: 84px;
 }
 
 .desert-summary-strip {
