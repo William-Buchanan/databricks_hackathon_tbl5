@@ -87,6 +87,7 @@ export function generateHealthcareDataset(): FacilityRecord[] {
           const population = 12000 + ((seed * 7919) % 78000) + (sparse ? 30000 : 0);
 
           rows.push({
+            recordKind: "facility",
             id: `fac-${seed}`,
             state: region.state,
             district: region.district,
@@ -94,6 +95,7 @@ export function generateHealthcareDataset(): FacilityRecord[] {
             pinCode: pin,
             villageTown: village,
             localPopulation: population,
+            localPopulationSource: "synthetic",
             facilityName: `${village} ${seed % 3 === 0 ? "Rural Referral Centre" : seed % 2 === 0 ? "Community Health Unit" : "General Hospital"}`,
             latitude: Number(lat.toFixed(5)),
             longitude: Number(lng.toFixed(5)),

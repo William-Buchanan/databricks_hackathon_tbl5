@@ -506,6 +506,7 @@ function regionLogPayload(region: RegionAggregate) {
     riskScore: region.riskScore,
     trustScore: region.trustScore,
     population: region.population,
+    populationSource: region.populationSource,
     nearestTertiaryMinutes: region.nearestTertiaryMinutes,
     facilityCount: region.facilityCount,
     capableFacilityCount: region.capableFacilityCount,

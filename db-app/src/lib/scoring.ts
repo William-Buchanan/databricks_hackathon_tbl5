@@ -51,8 +51,10 @@ export function aggregateRegions(records: FacilityRecord[], capability?: Capabil
   return Array.from(groups.entries())
     .map(([key, facilities]) => {
       const [state, district, subDistrict, pinCode, villageTown] = key.split("|");
+      const actualFacilities = facilities.filter((facility) => facility.recordKind !== "h3-density");
       const population = facilities.reduce((sum, f) => sum + f.localPopulation, 0);
-      const capableFacilities = capability ? facilities.filter((f) => f.capabilities.includes(capability)) : facilities.filter((f) => f.capabilities.length > 0);
+      const populationSource = aggregatePopulationSource(facilities);
+      const capableFacilities = capability ? actualFacilities.filter((f) => f.capabilities.includes(capability)) : actualFacilities.filter((f) => f.capabilities.length > 0);
       const capableBeds = capability ? capableFacilities.reduce((sum, f) => sum + (f.specializedBeds[capability] ?? 0), 0) : capableFacilities.reduce((sum, f) => sum + totalSpecializedBeds(f), 0);
       const trustScore = Math.round(facilities.reduce((sum, f) => sum + trustFor(f), 0) / facilities.length);
       const nearestTertiaryMinutes = Math.min(...facilities.map((f) => f.distanceToTertiaryMinutes));
@@ -68,7 +70,8 @@ export function aggregateRegions(records: FacilityRecord[], capability?: Capabil
         latitude: avg(facilities.map((f) => f.latitude)),
         longitude: avg(facilities.map((f) => f.longitude)),
         population,
-        facilityCount: facilities.length,
+        populationSource,
+        facilityCount: actualFacilities.length,
         capableFacilityCount: capableFacilities.length,
         capableBeds,
         trustScore,
@@ -80,6 +83,14 @@ export function aggregateRegions(records: FacilityRecord[], capability?: Capabil
       };
     })
     .sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore);
+}
+
+function aggregatePopulationSource(facilities: FacilityRecord[]): RegionAggregate["populationSource"] {
+  const sources = new Set(facilities.map((facility) => facility.localPopulationSource ?? "unavailable"));
+  if (sources.size === 1) return sources.values().next().value as RegionAggregate["populationSource"];
+  if (sources.has("source") && (sources.has("synthetic") || sources.has("unavailable"))) return "mixed";
+  if (sources.has("synthetic")) return "synthetic";
+  return "unavailable";
 }
 
 function totalSpecializedBeds(record: FacilityRecord): number {

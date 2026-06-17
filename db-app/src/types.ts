@@ -24,6 +24,7 @@ export interface DataCompletenessLog {
 
 export interface FacilityRecord {
   id: string;
+  recordKind?: "facility" | "h3-density";
   uniqueId?: string;
   state: string;
   district: string;
@@ -31,6 +32,7 @@ export interface FacilityRecord {
   pinCode: string;
   villageTown: string;
   localPopulation: number;
+  localPopulationSource?: "source" | "synthetic" | "unavailable";
   facilityName: string;
   latitude: number;
   longitude: number;
@@ -75,6 +77,7 @@ export interface RegionAggregate {
   latitude: number;
   longitude: number;
   population: number;
+  populationSource: "source" | "synthetic" | "mixed" | "unavailable";
   facilityCount: number;
   capableFacilityCount: number;
   capableBeds: number;

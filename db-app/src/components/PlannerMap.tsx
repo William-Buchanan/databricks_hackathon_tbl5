@@ -20,8 +20,6 @@ interface PlannerMapProps {
 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 const INDIA_BOUNDS = { minLat: 6.5, maxLat: 37.5, minLng: 68, maxLng: 98.5 };
 const H3_DISPLAY_RESOLUTION = 4;
-const H3_FACILITY_DOT_ZOOM = 8;
-type MapLayerMode = "points" | "h3";
 
 interface H3Cell {
   id: string;
@@ -44,7 +42,6 @@ interface H3FacilityPoint {
 export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover, showRouting, onToggleRouting, onRouteSummary }: PlannerMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMap = useRef<any>(null);
-  const markers = useRef<any[]>([]);
   const heatPolygons = useRef<any[]>([]);
   const h3FacilityMarkers = useRef<any[]>([]);
   const originMarker = useRef<any>(null);
@@ -55,12 +52,9 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
   const originRef = useRef<{ latitude: number; longitude: number } | undefined>(undefined);
   const selectedRef = useRef<RegionAggregate | undefined>(selected);
   const showRoutingRef = useRef(showRouting);
-  const layerModeRef = useRef<MapLayerMode>("h3");
   const lastCenteredRegionId = useRef<string | undefined>(undefined);
   const [mapError, setMapError] = useState<string | null>(apiKey ? null : "Google Maps key missing. Showing mock spatial geometry.");
-  const [layerMode, setLayerMode] = useState<MapLayerMode>("h3");
   const [mapReady, setMapReady] = useState(false);
-  const [mapZoom, setMapZoom] = useState(5);
 
   const center = selected ?? regions[0];
   const heatCells = useMemo(() => h3Cells(regions), [regions]);
@@ -68,7 +62,6 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
 
   selectedRef.current = selected;
   showRoutingRef.current = showRouting;
-  layerModeRef.current = layerMode;
 
   useEffect(() => {
     if (!apiKey || !mapRef.current) return;
@@ -104,9 +97,7 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
           },
         });
         setMapReady(true);
-        setMapZoom(googleMap.current.getZoom?.() ?? 5);
         googleMap.current.addListener("click", (event: any) => {
-          if (layerModeRef.current !== "points") return;
           if (!showRoutingRef.current) return;
           const latLng = event.latLng;
           if (!latLng) return;
@@ -120,63 +111,26 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
           originRef.current = origin;
           requestFastestRoute(origin, selectedRef.current, onRouteSummary);
         });
-        googleMap.current.addListener("zoom_changed", () => {
-          const zoom = googleMap.current?.getZoom?.();
-          if (typeof zoom === "number") setMapZoom(zoom);
-        });
       })
       .catch((error: Error) => setMapError(error.message));
   }, []);
 
   useEffect(() => {
     if (!mapReady || !googleMap.current || !window.google?.maps) return;
-    markers.current.forEach((marker) => marker.setMap(null));
-    markers.current = [];
-
-    regions.forEach((region) => {
-      const marker = new window.google.maps.Marker({
-        position: { lat: region.latitude, lng: region.longitude },
-        map: googleMap.current,
-        visible: layerMode === "points",
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: selected?.id === region.id ? 10 : 7,
-          fillColor: markerColor(region.status),
-          fillOpacity: 0.94,
-          strokeColor: "#ffffff",
-          strokeWeight: selected?.id === region.id ? 3 : 2,
-        },
-      });
-      marker.addListener("click", () => {
-        onSelect(region);
-        selectedRef.current = region;
-        if (showRoutingRef.current) {
-          placeDestinationMarker(region);
-        }
-        if (showRoutingRef.current && originRef.current) {
-          requestFastestRoute(originRef.current, region, onRouteSummary);
-        }
-      });
-      marker.addListener("mouseover", () => onHover(region));
-      markers.current.push(marker);
-    });
-
     if (selected && selected.id !== lastCenteredRegionId.current) {
       lastCenteredRegionId.current = selected.id;
       googleMap.current.panTo({ lat: selected.latitude, lng: selected.longitude });
       googleMap.current.setZoom(9);
-      if (layerMode === "points" && showRoutingRef.current) {
+      if (showRoutingRef.current) {
         placeDestinationMarker(selected);
       }
     }
-  }, [regions, selected, onSelect, onHover, layerMode, mapReady]);
+  }, [selected, mapReady]);
 
   useEffect(() => {
     if (!mapReady || !googleMap.current || !window.google?.maps) return;
     heatPolygons.current.forEach((polygon) => polygon.setMap(null));
     heatPolygons.current = [];
-
-    if (layerMode !== "h3") return;
 
     heatCells.forEach((cell) => {
       const polygon = new window.google.maps.Polygon({
@@ -194,14 +148,12 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
       }
       heatPolygons.current.push(polygon);
     });
-  }, [heatCells, layerMode, mapReady, onHover, onSelect, selected?.id]);
+  }, [heatCells, mapReady, onHover, onSelect, selected?.id]);
 
   useEffect(() => {
     if (!mapReady || !googleMap.current || !window.google?.maps) return;
     h3FacilityMarkers.current.forEach((marker) => marker.setMap(null));
     h3FacilityMarkers.current = [];
-
-    if (layerMode !== "h3" || mapZoom < H3_FACILITY_DOT_ZOOM) return;
 
     h3FacilityPoints.forEach((point) => {
       const marker = new window.google.maps.Marker({
@@ -211,7 +163,7 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
         zIndex: 900,
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
-          scale: selected?.id === point.region.id ? 5.8 : 4.8,
+          scale: selected?.id === point.region.id ? 5.6 : 4.4,
           fillColor: markerColor(point.region.status),
           fillOpacity: 0.92,
           strokeColor: "#ffffff",
@@ -220,21 +172,21 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
       });
       marker.addListener("click", () => {
         showH3Facility(point, marker);
-        onScopeRegion?.(point.region);
-        if (!onScopeRegion) onSelect(point.region);
+        onSelect(point.region);
         selectedRef.current = point.region;
+        if (showRoutingRef.current) {
+          placeDestinationMarker(point.region);
+        }
+        if (showRoutingRef.current && originRef.current) {
+          requestFastestRoute(originRef.current, point.region, onRouteSummary);
+        }
       });
       marker.addListener("mouseover", () => onHover(point.region));
       h3FacilityMarkers.current.push(marker);
     });
-  }, [h3FacilityPoints, layerMode, mapReady, mapZoom, onHover, onScopeRegion, onSelect, selected?.id]);
+  }, [h3FacilityPoints, mapReady, onHover, onRouteSummary, onScopeRegion, onSelect, selected?.id]);
 
   useEffect(() => {
-    if (layerMode === "h3") {
-      clearRoute();
-      onRouteSummary(undefined);
-      return;
-    }
     if (showRouting) {
       if (selectedRef.current) {
         placeDestinationMarker(selectedRef.current);
@@ -243,7 +195,7 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
     }
     clearRoute();
     onRouteSummary(undefined);
-  }, [showRouting, onRouteSummary, layerMode]);
+  }, [showRouting, onRouteSummary]);
 
   const fallbackPoints = useMemo(() => projectPoints(regions), [regions]);
   const fallbackCells = useMemo(() => projectHeatCells(heatCells), [heatCells]);
@@ -256,29 +208,19 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
           <h2>Catchment and travel burden</h2>
         </div>
         <div className="map-actions">
-          <div className="map-layer-toggle" aria-label="Map layer">
-            <button type="button" className={layerMode === "points" ? "active" : ""} onClick={() => changeLayerMode("points")}>
-              Map
-            </button>
-            <button type="button" className={layerMode === "h3" ? "active" : ""} onClick={() => changeLayerMode("h3")}>
-              H3 heatmap
-            </button>
-          </div>
-          {layerMode === "points" && (
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                if (showRouting) {
-                  clearRoute();
-                  onRouteSummary(undefined);
-                }
-                onToggleRouting();
-              }}
-            >
-              <Route size={14} /> {showRouting ? "Hide travel route" : "Show travel route"}
-            </button>
-          )}
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              if (showRouting) {
+                clearRoute();
+                onRouteSummary(undefined);
+              }
+              onToggleRouting();
+            }}
+          >
+            <Route size={14} /> {showRouting ? "Hide travel route" : "Show travel route"}
+          </button>
         </div>
       </div>
       <div className="map-canvas">
@@ -289,15 +231,14 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
             points={fallbackPoints}
             cells={fallbackCells}
             selected={selected}
-            showRouting={showRouting && layerMode === "points"}
-            layerMode={layerMode}
+            showRouting={showRouting}
             onSelect={onSelect}
             onScopeRegion={onScopeRegion}
             onHover={onHover}
             onRouteSummary={onRouteSummary}
           />
         )}
-        {layerMode === "h3" && <HeatmapLegend cells={heatCells} facilityCount={h3FacilityPoints.length} mapZoom={mapZoom} />}
+        <HeatmapLegend cells={heatCells} facilityCount={h3FacilityPoints.length} />
         {mapError && (
           <div className="map-warning">
             <AlertTriangle size={15} /> {mapError}
@@ -418,8 +359,6 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
   function clearH3Hospital() {
     h3HospitalInfoWindow.current?.close?.();
     h3HospitalInfoWindow.current = null;
-    h3FacilityMarkers.current.forEach((marker) => marker.setMap(null));
-    h3FacilityMarkers.current = [];
     if (h3HospitalMarker.current) {
       h3HospitalMarker.current.setMap(null);
       h3HospitalMarker.current = null;
@@ -439,31 +378,26 @@ export function PlannerMap({ regions, selected, onSelect, onScopeRegion, onHover
     originRef.current = undefined;
   }
 
-  function changeLayerMode(nextMode: MapLayerMode) {
-    setLayerMode(nextMode);
-    if (nextMode === "h3") {
-      clearRoute();
-      onRouteSummary(undefined);
-    } else {
-      clearH3Hospital();
-    }
-    logPlannerEvent({
-      eventType: "map_layer_changed",
-      payload: {
-        layerMode: nextMode,
-        h3CellCount: heatCells.length,
-        visibleRegionCount: regions.length,
-      },
-    });
-  }
-
   function applyH3RegionScope(region: RegionAggregate) {
-    clearRoute();
-    onRouteSummary(undefined);
+    clearH3Hospital();
     showH3Hospital(region);
     onScopeRegion?.(region);
     if (!onScopeRegion) onSelect(region);
     selectedRef.current = region;
+    if (showRoutingRef.current) {
+      placeDestinationMarker(region);
+    }
+    if (showRoutingRef.current && originRef.current) {
+      requestFastestRoute(originRef.current, region, onRouteSummary);
+    }
+    logPlannerEvent({
+      eventType: "h3_region_selected",
+      payload: {
+        h3CellCount: heatCells.length,
+        regionId: region.id,
+        visibleRegionCount: regions.length,
+      },
+    });
   }
 }
 
@@ -489,7 +423,7 @@ function escapeHtml(value: string) {
   });
 }
 
-function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect, onScopeRegion, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<H3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; layerMode: MapLayerMode; onSelect: (region: RegionAggregate) => void; onScopeRegion?: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
+function FallbackMap({ points, cells, selected, showRouting, onSelect, onScopeRegion, onHover, onRouteSummary }: { points: Array<{ region: RegionAggregate; x: number; y: number }>; cells: Array<H3Cell & { x: number; y: number; width: number; height: number }>; selected?: RegionAggregate; showRouting: boolean; onSelect: (region: RegionAggregate) => void; onScopeRegion?: (region: RegionAggregate) => void; onHover: (region: RegionAggregate) => void; onRouteSummary: (summary: RouteSummary | undefined) => void }) {
   const [origin, setOrigin] = useState<{ x: number; y: number; latitude: number; longitude: number } | undefined>();
 
   useEffect(() => {
@@ -531,37 +465,36 @@ function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect
     >
       <div className="map-gridline vertical" />
       <div className="map-gridline horizontal" />
-      {layerMode === "h3" &&
-        cells.map((cell) => (
-          <button
-            key={cell.id}
-            type="button"
-            className={`h3-cell ${selected && cell.regions.some((region) => region.id === selected.id) ? "selected" : ""}`}
-            style={{
-              left: `${cell.x}%`,
-              top: `${cell.y}%`,
-              width: `${cell.width}%`,
-              height: `${cell.height}%`,
-              backgroundColor: cell.hasData ? heatColor(cell.averageRisk) : "#edf2ef",
-              opacity: cell.hasData ? 0.34 + Math.min(0.32, cell.averageRisk / 320) : 0.18,
-            }}
-            title={`${cell.id}: risk ${cell.averageRisk}, trust ${cell.averageTrust}, ${cell.regions.length} zones`}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (cell.topRegion) {
-                onScopeRegion?.(cell.topRegion);
-                if (!onScopeRegion) onSelect(cell.topRegion);
-              }
-            }}
-            onMouseEnter={() => {
-              if (cell.topRegion) onHover(cell.topRegion);
-            }}
-          >
-            <span>{cell.id.split("-").slice(-2).join("-")}</span>
-          </button>
-        ))}
+      {cells.map((cell) => (
+        <button
+          key={cell.id}
+          type="button"
+          className={`h3-cell ${selected && cell.regions.some((region) => region.id === selected.id) ? "selected" : ""}`}
+          style={{
+            left: `${cell.x}%`,
+            top: `${cell.y}%`,
+            width: `${cell.width}%`,
+            height: `${cell.height}%`,
+            backgroundColor: cell.hasData ? heatColor(cell.averageRisk) : "#edf2ef",
+            opacity: cell.hasData ? 0.34 + Math.min(0.32, cell.averageRisk / 320) : 0.18,
+          }}
+          title={`${cell.id}: risk ${cell.averageRisk}, trust ${cell.averageTrust}, ${cell.regions.length} zones`}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (cell.topRegion) {
+              onScopeRegion?.(cell.topRegion);
+              if (!onScopeRegion) onSelect(cell.topRegion);
+            }
+          }}
+          onMouseEnter={() => {
+            if (cell.topRegion) onHover(cell.topRegion);
+          }}
+        >
+          <span>{cell.id.split("-").slice(-2).join("-")}</span>
+        </button>
+      ))}
       {showRouting && origin && <span className="fallback-route-point fallback-route-a" style={{ left: `${origin.x}%`, top: `${origin.y}%` }}>A</span>}
-      {layerMode === "points" && points.map(({ region, x, y }) => (
+      {points.map(({ region, x, y }) => (
         <button
           key={region.id}
           type="button"
@@ -586,14 +519,13 @@ function FallbackMap({ points, cells, selected, showRouting, layerMode, onSelect
           onMouseEnter={() => onHover(region)}
         />
       ))}
-      {showRouting && selected && layerMode === "points" && <span className="fallback-route-point fallback-route-b" style={selectedFallbackPosition(selected, points)}>B</span>}
+      {showRouting && selected && <span className="fallback-route-point fallback-route-b" style={selectedFallbackPosition(selected, points)}>B</span>}
     </div>
   );
 }
 
-function HeatmapLegend({ cells, facilityCount, mapZoom }: { cells: H3Cell[]; facilityCount: number; mapZoom: number }) {
+function HeatmapLegend({ cells, facilityCount }: { cells: H3Cell[]; facilityCount: number }) {
   const highRiskCells = cells.filter((cell) => cell.averageRisk >= 70).length;
-  const dotsVisible = mapZoom >= H3_FACILITY_DOT_ZOOM;
   return (
     <div className="heatmap-legend">
       <strong>H3 risk heatmap</strong>
@@ -604,7 +536,7 @@ function HeatmapLegend({ cells, facilityCount, mapZoom }: { cells: H3Cell[]; fac
         <i className="high" />
       </div>
       <small>Resolution {H3_DISPLAY_RESOLUTION}; facility H3 indices are aggregated into each cell.</small>
-      <small>{dotsVisible ? `${facilityCount} hospital dots visible` : `Zoom to ${H3_FACILITY_DOT_ZOOM}+ to see hospital dots`}</small>
+      <small>{facilityCount} hospital dots visible</small>
     </div>
   );
 }
@@ -632,6 +564,7 @@ function facilityPointsForRegions(regions: RegionAggregate[]): H3FacilityPoint[]
   const points: H3FacilityPoint[] = [];
   regions.forEach((region) => {
     region.facilities.forEach((facility) => {
+      if (facility.recordKind === "h3-density") return;
       if (!Number.isFinite(facility.latitude) || !Number.isFinite(facility.longitude)) return;
       const key = facility.uniqueId ?? facility.id ?? `${facility.facilityName}-${facility.latitude}-${facility.longitude}`;
       if (seen.has(key)) return;

@@ -682,34 +682,6 @@ main {
   gap: 10px;
 }
 
-.map-layer-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid rgba(231, 223, 209, 0.9);
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: var(--shadow-subtle-2);
-}
-
-.map-layer-toggle button {
-  min-height: 34px;
-  border: 0;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--color-cinder);
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 850;
-  white-space: nowrap;
-}
-
-.map-layer-toggle button.active {
-  background: var(--color-obsidian);
-  color: var(--color-eggshell);
-}
-
 .map-canvas {
   position: relative;
   height: 520px;

@@ -56,7 +56,8 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
             status: region.status,
             riskScore: region.riskScore,
             trustScore: region.trustScore,
-            population: region.population,
+            population: sourcePopulationText(region),
+            populationSource: region.populationSource,
             nearestTertiaryMinutes: region.nearestTertiaryMinutes,
             capableFacilities: region.capableFacilityCount,
             facilities: region.facilityCount,
@@ -119,7 +120,14 @@ export function AskAiPanel({ filters, regions, planningProfile }: AskAiPanelProp
 function localAnswer(question: string, regions: RegionAggregate[], profile: SpecialtyPlanningProfile, budgetDescription: string) {
   const top = regions[0];
   if (!top) return "No regions are in scope. Broaden the filters and ask again.";
-  return `Based on the current mock dataset, start with ${top.villageTown}, ${top.district}. It is classified as ${top.status} with risk ${top.riskScore}, trust ${top.trustScore}, ${top.population.toLocaleString("en-IN")} people, and ${top.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the GBD life-threatening score is ${profile.lifeCriticality}/5 using ${profile.gbdEvidence.primaryCause} and ${profile.gbdEvidence.preferredMeasure}; mortality relevance is ${profile.gbdEvidence.mortalityRelevance}/5 and YLL (years of life lost) relevance is ${profile.gbdEvidence.yllRelevance}/5. Cost is ${profile.costTier}/5 and expected lift is ${profile.expectedLift}/5. Based on that specialty cost tier, prioritize: ${budgetDescription} Question interpreted: "${question}".`;
+  return `Based on the current dataset, start with ${top.villageTown}, ${top.district}. It is classified as ${top.status} with risk ${top.riskScore}, trust ${top.trustScore}, ${sourcePopulationText(top)} population, and ${top.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the GBD life-threatening score is ${profile.lifeCriticality}/5 using ${profile.gbdEvidence.primaryCause} and ${profile.gbdEvidence.preferredMeasure}; mortality relevance is ${profile.gbdEvidence.mortalityRelevance}/5 and YLL (years of life lost) relevance is ${profile.gbdEvidence.yllRelevance}/5. Cost is ${profile.costTier}/5 and expected lift is ${profile.expectedLift}/5. Based on that specialty cost tier, prioritize: ${budgetDescription} Question interpreted: "${question}".`;
+}
+
+function sourcePopulationText(region: RegionAggregate): string {
+  if (region.population > 0 && (region.populationSource === "source" || region.populationSource === "mixed")) {
+    return region.population.toLocaleString("en-IN");
+  }
+  return "unavailable source-backed";
 }
 
 function FormattedAssistantMessage({ text }: { text: string }) {

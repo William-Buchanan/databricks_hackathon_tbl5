@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { randomUUID } from "node:crypto";
-import { latLngToCell } from "h3-js";
+import { cellArea, cellToLatLng, isValidCell } from "h3-js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -215,13 +215,40 @@ async function handleFacilities(request: any, response: any) {
       [],
     );
     const densityByH3 = await fetchH3DensityMetrics(warehouseId, result.rows);
+    const noHospitalH3Rows = await fetchNoHospitalH3DensityRows(warehouseId);
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ records: result.rows.map((row) => mapFacilityRow(row, densityByH3)), source: "workspace.gold.facilities_with_confidence_score + workspace.gold.hospitals_per_h3_and_density_ratio" }));
+    response.end(JSON.stringify({
+      records: [
+        ...result.rows.map((row) => mapFacilityRow(row, densityByH3)),
+        ...noHospitalH3Rows.map(mapNoHospitalH3DensityRow),
+      ],
+      source: "workspace.gold.facilities_with_confidence_score + workspace.gold.hospitals_per_h3_and_density_ratio",
+    }));
   } catch (error) {
     console.error(JSON.stringify({ facilities_query_error: (error as Error).message }));
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ records: [], source: "fallback", error: (error as Error).message }));
   }
+}
+
+async function fetchNoHospitalH3DensityRows(warehouseId: string) {
+  const result = await executeSqlRows(
+    warehouseId,
+    `SELECT
+      h3_index_7,
+      unique_hospital_count,
+      population_density_per_km2,
+      hospital_to_population_density_ratio,
+      normalized_hosp_pop_ratio
+    FROM workspace.gold.hospitals_per_h3_and_density_ratio
+    WHERE unique_hospital_count = 0
+      AND population_density_per_km2 IS NOT NULL
+      AND population_density_per_km2 > 0
+    ORDER BY population_density_per_km2 DESC
+    LIMIT 1500`,
+    [],
+  );
+  return result.rows;
 }
 
 async function fetchH3DensityMetrics(warehouseId: string, rows: Array<Record<string, any>>) {
@@ -296,7 +323,8 @@ function localPlannerAnswer(body: any): string {
   if (!region || !profile) {
     return "Broaden the filters so there are regions in scope, then ask again.";
   }
-  return `Start with ${region.villageTown}, ${region.district}, ${region.state}. It is classified as ${region.status} with risk ${region.riskScore}, trust ${region.trustScore}, ${region.population?.toLocaleString?.("en-IN") ?? region.population} people, and ${region.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the GBD life-threatening score is ${profile.lifeCriticality}/5 using ${profile.gbdEvidence?.primaryCause ?? "the selected cause"} and ${profile.gbdEvidence?.preferredMeasure ?? "GBD burden measures"} such as YLL (years of life lost). Cost is ${profile.costTier}/5 and expected lift is ${profile.expectedLift}/5. Specialty-derived intervention fit: ${budget?.label ?? "selected band"} - ${budget?.description ?? "prioritize the least capital-intensive intervention first."}`;
+  const populationText = typeof region.population === "string" ? region.population : "unavailable source-backed";
+  return `Start with ${region.villageTown}, ${region.district}, ${region.state}. It is classified as ${region.status} with risk ${region.riskScore}, trust ${region.trustScore}, ${populationText} population, and ${region.nearestTertiaryMinutes} minutes to tertiary care. For ${profile.category}, the GBD life-threatening score is ${profile.lifeCriticality}/5 using ${profile.gbdEvidence?.primaryCause ?? "the selected cause"} and ${profile.gbdEvidence?.preferredMeasure ?? "GBD burden measures"} such as YLL (years of life lost). Cost is ${profile.costTier}/5 and expected lift is ${profile.expectedLift}/5. Specialty-derived intervention fit: ${budget?.label ?? "selected band"} - ${budget?.description ?? "prioritize the least capital-intensive intervention first."}`;
 }
 
 let tableReady = false;
@@ -495,8 +523,10 @@ function mapFacilityRow(row: Record<string, any>, densityByH3 = new Map<string, 
   const facilityName = stringValue(row.name, "Unnamed facility");
   const h3Index7 = h3Index7ForRow(row);
   const h3DensityMetrics = h3Index7 ? densityByH3.get(h3Index7) : undefined;
+  const population = sourcePopulationForRow(row);
 
   return {
+    recordKind: "facility",
     id: stringValue(row.unique_id, stringValue(row.cluster_id, facilityName)).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
     uniqueId: stringValue(row.unique_id, ""),
     state: stringValue(row.address_stateOrRegion, "Unknown"),
@@ -504,7 +534,8 @@ function mapFacilityRow(row: Record<string, any>, densityByH3 = new Map<string, 
     subDistrict: stringValue(row.address_city, "Unknown"),
     pinCode: stringValue(row.address_zipOrPostcode, "Unknown").replace(/\s+/g, ""),
     villageTown: stringValue(row.address_city, facilityName),
-    localPopulation: Math.max(15_000, capacity * 220 + numeric(row.area, 0) + numeric(row.engagement_metrics_n_followers, 0)),
+    localPopulation: population.value,
+    localPopulationSource: population.source,
     facilityName,
     latitude: numeric(row.latitude, 0),
     longitude: numeric(row.longitude, 0),
@@ -537,13 +568,69 @@ function mapFacilityRow(row: Record<string, any>, densityByH3 = new Map<string, 
   };
 }
 
+function mapNoHospitalH3DensityRow(row: Record<string, any>) {
+  const h3Index7 = stringValue(row.h3_index_7, "");
+  const [latitude, longitude] = isValidCell(h3Index7) ? cellToLatLng(h3Index7) : [0, 0];
+  const populationDensity = numeric(row.population_density_per_km2, 0);
+  const areaKm2 = isValidCell(h3Index7) ? cellArea(h3Index7, "km2") : 0;
+  const population = Math.max(0, Math.round(populationDensity * areaKm2));
+  const h3DensityMetrics = {
+    h3Index7,
+    uniqueHospitalCount: numeric(row.unique_hospital_count, 0),
+    populationDensityPerKm2: populationDensity,
+    hospitalToPopulationDensityRatio: numeric(row.hospital_to_population_density_ratio, 0),
+    normalizedHospPopRatio: numeric(row.normalized_hosp_pop_ratio, 0),
+  };
+
+  return {
+    recordKind: "h3-density",
+    id: `no-hospital-h3-${h3Index7}`,
+    uniqueId: h3Index7,
+    state: "Unassigned H3",
+    district: "No-hospital H3 cells",
+    subDistrict: "No-hospital H3 cells",
+    pinCode: h3Index7,
+    villageTown: `H3 ${h3Index7}`,
+    localPopulation: population,
+    localPopulationSource: "source",
+    facilityName: `No hospital H3 cell ${h3Index7}`,
+    latitude,
+    longitude,
+    capabilities: [],
+    specializedBeds: {},
+    operationalStatus: "Unknown",
+    dataCompleteness: {
+      updatedDaysAgo: 0,
+      missingOperationalFields: 0,
+      sourceConfidence: 0.8,
+      hasRecentSurvey: true,
+    },
+    distanceToTertiaryMinutes: 180,
+    h3Index7,
+    h3DensityMetrics,
+    accuracyConfidence: 80,
+    confidenceCategory: "H3 density table",
+    source: "workspace.gold.hospitals_per_h3_and_density_ratio",
+    sourceTypes: ["h3-density"],
+  };
+}
+
+function sourcePopulationForRow(row: Record<string, any>): { value: number; source: "source" | "unavailable" } {
+  const populationKeys = [
+    "local_population",
+    "census_population",
+    "city_population",
+    "town_population",
+    "village_population",
+    "population",
+  ];
+  const value = populationKeys.map((key) => numeric(row[key], Number.NaN)).find((candidate) => Number.isFinite(candidate) && candidate > 0);
+  return typeof value === "number" ? { value, source: "source" } : { value: 0, source: "unavailable" };
+}
+
 function h3Index7ForRow(row: Record<string, any>) {
   const existing = stringValue(row.h3_index_7, "");
-  if (existing) return existing;
-  const latitude = numeric(row.latitude, Number.NaN);
-  const longitude = numeric(row.longitude, Number.NaN);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "";
-  return latLngToCell(latitude, longitude, 7);
+  return /^[0-9a-f]{15}$/i.test(existing) ? existing : "";
 }
 
 function capabilitiesFor(text: string) {

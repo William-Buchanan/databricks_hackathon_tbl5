@@ -9,6 +9,8 @@ interface InspectionPanelProps {
 }
 
 export function InspectionPanel({ region, capability }: InspectionPanelProps) {
+  const facilityRows = region?.facilities.filter((facility) => facility.recordKind !== "h3-density") ?? [];
+
   if (!region) {
     return (
       <section className="inspection-panel empty-state">
@@ -32,7 +34,7 @@ export function InspectionPanel({ region, capability }: InspectionPanelProps) {
         <span className={`status-pill ${statusClass(region.status)}`}>{region.status}</span>
       </div>
       <div className="metric-grid">
-        <Metric icon={<UsersRound size={16} />} label="Local population" value={region.population.toLocaleString("en-IN")} />
+        <Metric icon={<UsersRound size={16} />} label="Local population" value={formatPopulation(region)} />
         <Metric icon={<Activity size={16} />} label={`${capability} beds`} value={String(region.capableBeds)} />
         <Metric icon={<Building2 size={16} />} label="Facilities" value={`${region.capableFacilityCount}/${region.facilityCount}`} />
         <Metric icon={<DatabaseZap size={16} />} label="Trust / Risk" value={`${region.trustScore} / ${region.riskScore}`} />
@@ -59,21 +61,33 @@ export function InspectionPanel({ region, capability }: InspectionPanelProps) {
           <span>Capabilities</span>
           <span>Data log</span>
         </div>
-        {region.facilities.map((facility) => (
-          <div className="table-row" key={facility.id}>
+        {facilityRows.length ? (
+          facilityRows.map((facility) => (
+            <div className="table-row" key={facility.id}>
+              <span>
+                <strong>{facility.facilityName}</strong>
+                <small>
+                  {facility.latitude}, {facility.longitude}
+                </small>
+              </span>
+              <span>{facility.operationalStatus}</span>
+              <span>{facility.capabilities.length ? facility.capabilities.join(", ") : "No specialist capability recorded"}</span>
+              <span>
+                {facility.dataCompleteness.updatedDaysAgo}d old, {facility.dataCompleteness.missingOperationalFields} missing fields
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="table-row">
             <span>
-              <strong>{facility.facilityName}</strong>
-              <small>
-                {facility.latitude}, {facility.longitude}
-              </small>
+              <strong>No hospital records in this H3 cell</strong>
+              <small>Population comes from population_density_per_km2 multiplied by H3 area.</small>
             </span>
-            <span>{facility.operationalStatus}</span>
-            <span>{facility.capabilities.length ? facility.capabilities.join(", ") : "No specialist capability recorded"}</span>
-            <span>
-              {facility.dataCompleteness.updatedDaysAgo}d old, {facility.dataCompleteness.missingOperationalFields} missing fields
-            </span>
+            <span>None</span>
+            <span>No hospital capability recorded</span>
+            <span>H3 density source</span>
           </div>
-        ))}
+        )}
       </div>
     </section>
   );
@@ -87,6 +101,13 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatPopulation(region: RegionAggregate): string {
+  if (region.population > 0 && (region.populationSource === "source" || region.populationSource === "mixed")) {
+    return region.population.toLocaleString("en-IN");
+  }
+  return "Unavailable";
 }
 
 function formatRatio(value: number): string {

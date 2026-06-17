@@ -14,20 +14,20 @@ const MAX_VISIBLE_DESERTS = 15;
 const H3_CLUSTER_RESOLUTION = 4;
 
 export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: LargestDesertsPanelProps) {
-  const h3Clusters = lightH3DesertClusters(regions);
+  const h3Clusters = noHospitalH3DesertClusters(regions);
   const visibleClusters = h3Clusters.slice(0, MAX_VISIBLE_DESERTS);
-  const othersPopulation = h3Clusters.slice(MAX_VISIBLE_DESERTS).reduce((sum, cluster) => sum + cluster.population, 0);
-  const maxPopulation = Math.max(1, ...visibleClusters.map((cluster) => cluster.population), othersPopulation);
-  const totalPopulation = h3Clusters.reduce((sum, cluster) => sum + cluster.population, 0);
+  const othersPopulation = sourcePopulation(h3Clusters.slice(MAX_VISIBLE_DESERTS));
+  const maxPopulation = Math.max(1, ...visibleClusters.map((cluster) => (hasSourcePopulation(cluster) ? cluster.population : 0)), othersPopulation);
+  const totalPopulation = sourcePopulation(h3Clusters);
 
   return (
     <section className="largest-deserts-panel" aria-label="Largest medical deserts">
       <div className="panel-header compact">
         <div>
           <p className="eyebrow">Largest deserts</p>
-          <h2>{visibleClusters.length ? "Largest desert clusters" : "No desert clusters in scope"}</h2>
+          <h2>{visibleClusters.length ? "No-hospital H3 clusters" : "No no-hospital H3 clusters in scope"}</h2>
         </div>
-        <span className="source-badge">Estimated people</span>
+        <span className="source-badge">Source population only</span>
       </div>
 
       <div className="desert-summary-strip">
@@ -37,7 +37,7 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
         </span>
         <span>
           <strong>{formatPopulation(totalPopulation)}</strong>
-          estimated people
+          source population
         </span>
       </div>
 
@@ -57,11 +57,11 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
                 <small>
                   <MapPin size={13} /> {cluster.districts.join(", ")}
                 </small>
-                <i style={{ width: `${Math.max(8, (cluster.population / maxPopulation) * 100)}%` }} />
+                <i style={{ width: `${Math.max(8, ((hasSourcePopulation(cluster) ? cluster.population : 0) / maxPopulation) * 100)}%` }} />
               </span>
               <span className="desert-rank-value">
-                <strong>{formatPopulation(cluster.population)}</strong>
-                <small>est. people</small>
+                <strong>{formatClusterPopulation(cluster)}</strong>
+                <small>{hasSourcePopulation(cluster) ? "source population" : "population unavailable"}</small>
               </span>
             </button>
           ))}
@@ -77,15 +77,15 @@ export function LargestDesertsPanel({ regions, selectedId, onSelect, onHover }: 
               </span>
               <span className="desert-rank-value">
                 <strong>{formatPopulation(othersPopulation)}</strong>
-                <small>est. people</small>
+                <small>source population</small>
               </span>
             </div>
           )}
         </div>
       ) : (
         <div className="empty-state compact-empty">
-          <h2>No large sparse desert clusters match the current filters.</h2>
-          <p>Adjust specialty or geography to expand the scope.</p>
+          <h2>No source-backed no-hospital H3 clusters match the current filters.</h2>
+          <p>The app will not invent city populations for H3 cells that do not have population data.</p>
         </div>
       )}
     </section>
@@ -99,12 +99,14 @@ interface H3DesertCluster {
   topRegion: RegionAggregate;
   districts: string[];
   population: number;
+  populationSource: RegionAggregate["populationSource"];
   averageRisk: number;
   capableFacilityCount: number;
   facilityCount: number;
+  sourceH3HospitalCount: number;
 }
 
-function lightH3DesertClusters(regions: RegionAggregate[]): H3DesertCluster[] {
+function noHospitalH3DesertClusters(regions: RegionAggregate[]): H3DesertCluster[] {
   const groups = new Map<string, RegionAggregate[]>();
 
   regions.forEach((region) => {
@@ -119,6 +121,7 @@ function lightH3DesertClusters(regions: RegionAggregate[]): H3DesertCluster[] {
       const population = clusterRegions.reduce((sum, region) => sum + region.population, 0);
       const capableFacilityCount = clusterRegions.reduce((sum, region) => sum + region.capableFacilityCount, 0);
       const facilityCount = clusterRegions.reduce((sum, region) => sum + region.facilityCount, 0);
+      const sourceH3HospitalCount = clusterRegions.reduce((sum, region) => sum + sourceH3HospitalCountForRegion(region), 0);
       const averageRisk = Math.round(clusterRegions.reduce((sum, region) => sum + region.riskScore, 0) / clusterRegions.length);
       const topRegion = [...clusterRegions].sort((a, b) => b.riskScore - a.riskScore || a.trustScore - b.trustScore)[0];
       const districts = Array.from(new Set(clusterRegions.map((region) => region.district))).sort((a, b) => a.localeCompare(b)).slice(0, 3);
@@ -129,18 +132,19 @@ function lightH3DesertClusters(regions: RegionAggregate[]): H3DesertCluster[] {
         topRegion,
         districts,
         population,
+        populationSource: aggregateClusterPopulationSource(clusterRegions),
         averageRisk,
         capableFacilityCount,
         facilityCount,
+        sourceH3HospitalCount,
       };
     })
     .filter((cluster) => {
-      const capableCoverage = cluster.capableFacilityCount / Math.max(1, cluster.population / 100000);
-      const hospitalCoverage = cluster.facilityCount / Math.max(1, cluster.population / 100000);
-      return cluster.averageRisk < 64 && capableCoverage < 1.25 && hospitalCoverage < 4;
+      const capableCoverage = hasSourcePopulation(cluster) ? cluster.capableFacilityCount / Math.max(1, cluster.population / 100000) : 0;
+      return cluster.sourceH3HospitalCount === 0 && cluster.averageRisk < 64 && capableCoverage < 1.25;
     })
     .slice()
-    .sort((a, b) => b.population - a.population || a.facilityCount - b.facilityCount || b.averageRisk - a.averageRisk);
+    .sort((a, b) => Number(hasSourcePopulation(b)) - Number(hasSourcePopulation(a)) || b.population - a.population || a.facilityCount - b.facilityCount || b.averageRisk - a.averageRisk);
 }
 
 function h3ClusterId(region: RegionAggregate): string {
@@ -150,6 +154,31 @@ function h3ClusterId(region: RegionAggregate): string {
 
 function clusterLabel(id: string, region: RegionAggregate): string {
   return region.villageTown;
+}
+
+function sourceH3HospitalCountForRegion(region: RegionAggregate): number {
+  if (region.h3DensityMetrics) return region.h3DensityMetrics.uniqueHospitalCount;
+  return region.facilities.filter((facility) => facility.h3Index7 && isValidCell(facility.h3Index7)).length;
+}
+
+function aggregateClusterPopulationSource(regions: RegionAggregate[]): RegionAggregate["populationSource"] {
+  const sources = new Set(regions.map((region) => region.populationSource));
+  if (sources.size === 1) return sources.values().next().value as RegionAggregate["populationSource"];
+  if (sources.has("source") || sources.has("mixed")) return "mixed";
+  if (sources.has("synthetic")) return "synthetic";
+  return "unavailable";
+}
+
+function hasSourcePopulation(cluster: Pick<H3DesertCluster, "population" | "populationSource">): boolean {
+  return cluster.population > 0 && (cluster.populationSource === "source" || cluster.populationSource === "mixed");
+}
+
+function sourcePopulation(clusters: H3DesertCluster[]): number {
+  return clusters.reduce((sum, cluster) => sum + (hasSourcePopulation(cluster) ? cluster.population : 0), 0);
+}
+
+function formatClusterPopulation(cluster: H3DesertCluster): string {
+  return hasSourcePopulation(cluster) ? formatPopulation(cluster.population) : "Unavailable";
 }
 
 function formatPopulation(value: number): string {
