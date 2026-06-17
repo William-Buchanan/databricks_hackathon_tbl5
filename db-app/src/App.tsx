@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { cellArea, cellToLatLng, isValidCell } from "h3-js";
 import { Bot, Flag, Globe2, Grid2X2, Stethoscope, X } from "lucide-react";
 import { AskAiPanel } from "./components/AskAiPanel";
 import { ExploreCards } from "./components/ExploreCards";
@@ -84,7 +85,21 @@ export default function App() {
       .then((data: { records?: FacilityRecord[]; source?: string; error?: string }) => {
         if (cancelled) return;
         if (data.records?.length) {
-          setDataset(data.records);
+          const processed = data.records.map((r) => {
+            if (r.recordKind === "h3-density" && r.h3Index7) {
+              const [lat, lng] = isValidCell(r.h3Index7) ? cellToLatLng(r.h3Index7) : [0, 0];
+              const area = isValidCell(r.h3Index7) ? cellArea(r.h3Index7, "km2") : 0;
+              const pop = Math.max(0, Math.round((r.h3DensityMetrics?.populationDensityPerKm2 ?? 0) * area));
+              return {
+                ...r,
+                latitude: lat,
+                longitude: lng,
+                localPopulation: pop,
+              };
+            }
+            return r;
+          });
+          setDataset(processed);
           setDatasetSource(data.source ?? "workspace.gold.facilities_with_confidence_score");
           logPlannerEvent({
             eventType: "facility_dataset_loaded",

@@ -1,7 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { randomUUID } from "node:crypto";
-import { cellArea, cellToLatLng, isValidCell } from "h3-js";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -570,10 +569,7 @@ function mapFacilityRow(row: Record<string, any>, densityByH3 = new Map<string, 
 
 function mapNoHospitalH3DensityRow(row: Record<string, any>) {
   const h3Index7 = stringValue(row.h3_index_7, "");
-  const [latitude, longitude] = isValidCell(h3Index7) ? cellToLatLng(h3Index7) : [0, 0];
   const populationDensity = numeric(row.population_density_per_km2, 0);
-  const areaKm2 = isValidCell(h3Index7) ? cellArea(h3Index7, "km2") : 0;
-  const population = Math.max(0, Math.round(populationDensity * areaKm2));
   const h3DensityMetrics = {
     h3Index7,
     uniqueHospitalCount: numeric(row.unique_hospital_count, 0),
@@ -591,11 +587,11 @@ function mapNoHospitalH3DensityRow(row: Record<string, any>) {
     subDistrict: "No-hospital H3 cells",
     pinCode: h3Index7,
     villageTown: `H3 ${h3Index7}`,
-    localPopulation: population,
+    localPopulation: 0,
     localPopulationSource: "source",
     facilityName: `No hospital H3 cell ${h3Index7}`,
-    latitude,
-    longitude,
+    latitude: 0,
+    longitude: 0,
     capabilities: [],
     specializedBeds: {},
     operationalStatus: "Unknown",
