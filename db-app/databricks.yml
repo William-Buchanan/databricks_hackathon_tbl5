@@ -12,12 +12,14 @@ resources:
             id: d117c0ca6fa3e29c
             permission: CAN_USE
         - name: facilities-source-table
-          table:
-            name: workspace.gold.facilities_with_confidence_score
+          uc_securable:
+            securable_full_name: workspace.gold.facilities_with_confidence_score
+            securable_type: TABLE
             permission: SELECT
         - name: h3-density-source-table
-          table:
-            name: workspace.gold.hospitals_per_h3_and_density_ratio
+          uc_securable:
+            securable_full_name: workspace.gold.hospitals_per_h3_and_density_ratio
+            securable_type: TABLE
             permission: SELECT
       config:
         command:
@@ -26,7 +28,7 @@ resources:
           - start
         env:
           - name: DATABRICKS_WAREHOUSE_ID
-            valueFrom: sql-warehouse
+            value_from: sql-warehouse
           - name: APP_LOG_TABLE
             value: workspace.default.user_logs
 
